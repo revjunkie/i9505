@@ -1354,6 +1354,7 @@ struct input_dev {
 
 	unsigned int users;
 	bool going_away;
+	bool disabled;
 
 	bool sync;
 
