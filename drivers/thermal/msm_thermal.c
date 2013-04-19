@@ -63,7 +63,7 @@ struct rail {
 	uint32_t freq_req;
 	uint32_t min_level;
 	uint32_t num_levels;
-	uint32_t curr_level;
+	int32_t curr_level;
 	uint32_t levels[3];
 	struct kobj_attribute value_attr;
 	struct kobj_attribute level_attr;
@@ -153,6 +153,9 @@ static int vdd_restriction_apply_freq(struct rail *r, int level)
 {
 	int ret = 0;
 
+	if (level == r->curr_level)
+		return ret;
+
 	/* level = -1: disable, level = 0,1,2..n: enable */
 	if (level == -1) {
 		ret = update_cpu_min_freq_all(r->min_level);
@@ -183,6 +186,9 @@ static int vdd_restriction_apply_voltage(struct rail *r, int level)
 				r->name);
 		return -EFAULT;
 	}
+	if (level == r->curr_level)
+		return ret;
+
 	/* level = -1: disable, level = 0,1,2..n: enable */
 	if (level == -1) {
 		ret = regulator_set_voltage(r->reg, r->min_level,
@@ -198,32 +204,6 @@ static int vdd_restriction_apply_voltage(struct rail *r, int level)
 		pr_err("level input:%d is not within range\n", level);
 		return -EINVAL;
 	}
-
-	return ret;
-}
-/* 1:enable, 0:disable */
-static int vdd_restriction_apply_all(int en)
-{
-	int i = 0;
-	int fail_cnt = 0;
-	int ret = 0;
-
-	for (i = 0; i < rails_cnt; i++) {
-		if (rails[i].freq_req == 1 && freq_table_get)
-			ret = vdd_restriction_apply_freq(&rails[i],
-					en ? 0 : -1);
-		else
-			ret = vdd_restriction_apply_voltage(&rails[i],
-					en ? 0 : -1);
-		if (ret) {
-			pr_err("Cannot set voltage for %s", rails[i].name);
-			fail_cnt++;
-		}
-	}
-	/* Check fail_cnt again to make sure all of the rails are applied
-	 * restriction successfully or not */
-	if (fail_cnt)
-		return -EFAULT;
 
 	return ret;
 }
@@ -266,8 +246,10 @@ static ssize_t vdd_rstr_en_store(struct kobject *kobj,
 			ret = vdd_restriction_apply_voltage(&rails[i],
 			(val) ? 0 : -1);
 
-		/* Even if fail to set one rail, still try to set the
-		 * others. Continue the loop */
+		/*
+		 * Even if fail to set one rail, still try to set the
+		 * others. Continue the loop
+		 */
 		if (ret)
 			pr_err("Set vdd restriction for %s failed\n",
 					rails[i].name);
@@ -317,7 +299,7 @@ static int vdd_rstr_reg_value_show(
 	else
 		val = reg->levels[reg->curr_level];
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", reg->levels[reg->curr_level]);
+	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
 
 static int vdd_rstr_reg_level_show(
@@ -368,6 +350,48 @@ static ssize_t vdd_rstr_reg_level_store(struct kobject *kobj,
 done_store_level:
 	mutex_unlock(&vdd_rstr_mutex);
 	return count;
+}
+
+/* 1:enable, 0:disable */
+static int vdd_restriction_apply_all(int en)
+{
+	int i = 0;
+	int en_cnt = 0;
+	int dis_cnt = 0;
+	int fail_cnt = 0;
+	int ret = 0;
+
+	for (i = 0; i < rails_cnt; i++) {
+		if (rails[i].freq_req == 1 && freq_table_get)
+			ret = vdd_restriction_apply_freq(&rails[i],
+					en ? 0 : -1);
+		else
+			ret = vdd_restriction_apply_voltage(&rails[i],
+					en ? 0 : -1);
+		if (ret) {
+			pr_err("Cannot set voltage for %s", rails[i].name);
+			fail_cnt++;
+		} else {
+			if (en)
+				en_cnt++;
+			else
+				dis_cnt++;
+		}
+	}
+
+	/* As long as one rail is enabled, vdd rstr is enabled */
+	if (en && en_cnt)
+		vdd_rstr_en.enabled = 1;
+	else if (!en && (dis_cnt == rails_cnt))
+		vdd_rstr_en.enabled = 0;
+
+	/*
+	 * Check fail_cnt again to make sure all of the rails are applied
+	 * restriction successfully or not
+	 */
+	if (fail_cnt)
+		return -EFAULT;
+	return ret;
 }
 
 static int msm_thermal_get_freq_table(void)
@@ -461,7 +485,8 @@ static void __cpuinit do_core_control(long temp)
 			cpus_offlined &= ~BIT(i);
 			pr_info("%s: Allow Online CPU%d Temp: %ld\n",
 					KBUILD_MODNAME, i, temp);
-			/* If this core is already online, then bring up the
+			/*
+			 * If this core is already online, then bring up the
 			 * next offlined core.
 			 */
 			if (cpu_online(i))
@@ -502,18 +527,15 @@ static int do_vdd_restriction(void)
 			dis_cnt++;
 			continue;
 		}
-		if (temp <=  msm_thermal_info.vdd_rstr_temp_hyst_degC &&
-				vdd_rstr_en.enabled == 0) {
+		if (temp <=  msm_thermal_info.vdd_rstr_temp_degC) {
 			ret = vdd_restriction_apply_all(1);
 			if (ret) {
 				pr_err( \
 				"Enable vdd rstr votlage for all failed\n");
 				goto exit;
 			}
-			vdd_rstr_en.enabled = 1;
 			goto exit;
-		} else if (temp > msm_thermal_info.vdd_rstr_temp_degC &&
-				vdd_rstr_en.enabled == 1)
+		} else if (temp > msm_thermal_info.vdd_rstr_temp_hyst_degC)
 			dis_cnt++;
 	}
 	if (dis_cnt == max_tsens_num) {
@@ -522,7 +544,6 @@ static int do_vdd_restriction(void)
 			pr_err("Disable vdd rstr votlage for all failed\n");
 			goto exit;
 		}
-		vdd_rstr_en.enabled = 0;
 	}
 exit:
 	mutex_unlock(&vdd_rstr_mutex);
