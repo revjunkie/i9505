@@ -3232,11 +3232,12 @@ static struct platform_device msm_tsens_device = {
 };
 
 static struct msm_thermal_data msm_thermal_pdata = {
-	.sensor_id = 7,
+	.sensor_id = 0,
 	.poll_ms = 250,
 	.limit_temp_degC = 70,
 	.temp_hysteresis_degC = 10,
 	.freq_step = 2,
+	.freq_control_mask = 0xf,
 	.core_limit_temp_degC = 80,
 	.core_temp_hysteresis_degC = 10,
 	.core_control_mask = 0xe,
