@@ -21,6 +21,8 @@ obj-y		:= elf.o entry-armv.o entry-common.o irq.o opcodes.o \
 
 obj-$(CONFIG_DEPRECATED_PARAM_STRUCT) += compat.o
 
+
+obj-$(CONFIG_REV_HOTPLUG)	+= rev_hotplug.o
 obj-$(CONFIG_LEDS)		+= leds.o
 obj-$(CONFIG_OC_ETM)		+= etm.o
 obj-$(CONFIG_CPU_IDLE)		+= cpuidle.o
