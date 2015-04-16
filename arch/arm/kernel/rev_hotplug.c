@@ -26,6 +26,7 @@
 
 struct rev_tune
 {
+unsigned int active;
 unsigned int shift_all;
 unsigned int shift_one;
 unsigned int shift_threshold;
@@ -39,6 +40,7 @@ unsigned int down_diff;
 unsigned int shift_diff;
 unsigned int shift_diff_all;
 } rev = {
+	.active = 1,
 	.shift_all = 98,
 	.shift_one = 40,
 	.shift_threshold = 2,
@@ -61,8 +63,6 @@ unsigned int load;
 static DEFINE_PER_CPU(struct cpu_info, rev_info);
 static DEFINE_MUTEX(hotplug_lock);
 
-static bool active = true;
-module_param(active, bool, 0644);
 static unsigned int debug = 0;
 module_param(debug, uint, 0644);
 
@@ -211,6 +211,7 @@ static ssize_t show_##file_name						\
 {									\
 	return sprintf(buf, "%u\n", rev.object);			\
 }
+show_one(active, active);
 show_one(shift_one, shift_one);
 show_one(shift_all, shift_all);
 show_one(shift_threshold, shift_threshold);
@@ -220,6 +221,25 @@ show_one(downshift_threshold, downshift_threshold);
 show_one(sample_time, sample_time);
 show_one(min_cpu, min_cpu);
 show_one(max_cpu, max_cpu);
+
+static ssize_t __ref store_active(struct kobject *a, struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	rev.active = input;
+		if (rev.active) {
+			queue_delayed_work_on(0, hotplug_wq, &hotplug_work, msecs_to_jiffies(rev.sample_time));
+		} else {
+			hotplug_all();
+			flush_workqueue(hotplug_wq);
+			cancel_delayed_work_sync(&hotplug_work);
+		}
+	return count;
+}
+define_one_global_rw(active);
 
 #define store_one(file_name, object)					\
 static ssize_t store_##file_name					\
@@ -246,6 +266,7 @@ store_one(max_cpu, max_cpu);
 
 static struct attribute *rev_hotplug_attributes[] = 
 {
+	&active.attr,
 	&shift_one.attr,
 	&shift_all.attr,
 	&shift_threshold.attr,
@@ -272,6 +293,7 @@ static int __init rev_hotplug_init(void)
 				WQ_HIGHPRI, 0);	
 
 	INIT_DELAYED_WORK(&hotplug_work, hotplug_decision_work);
+	if (rev.active)
 	schedule_delayed_work_on(0, &hotplug_work, HZ * 20);
 
 	rev_kobject = kobject_create_and_add("rev_hotplug", kernel_kobj);
