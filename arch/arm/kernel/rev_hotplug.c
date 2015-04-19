@@ -67,9 +67,9 @@ static unsigned int debug = 0;
 module_param(debug, uint, 0644);
 
 #define REV_INFO(msg...)		\
-do { 				\
-	if (debug)		\
-		pr_info(msg);	\
+do { 					\
+	if (debug)			\
+		pr_info(msg);		\
 } while (0)
 
 static struct delayed_work hotplug_work;
@@ -89,6 +89,7 @@ static inline void hotplug_all(void)
 	for_each_possible_cpu(cpu) 
 		if (!cpu_online(cpu) && num_online_cpus() < rev.max_cpu) 
 			cpu_up(cpu);
+			REV_INFO("onlining %d cpus\n", cpu);
 	
 	reset_counter();
 }
@@ -137,6 +138,7 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 {
 	unsigned int online_cpus, down_load, up_load, load;
 	unsigned int i, total_load = 0;
+	
 	mutex_lock(&hotplug_lock);
 	get_online_cpus();
 	for_each_online_cpu(i) {
@@ -156,48 +158,36 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 		}
 	put_online_cpus();
 	online_cpus = num_online_cpus();
-	load = (total_load * cpufreq_quick_get(0) / cpufreq_quick_get_max(0)) / online_cpus;  
-		REV_INFO("load is %d\n", load);
+	load = (total_load * cpufreq_quick_get(0) / cpufreq_quick_get_max(0)) / online_cpus; 
+		REV_INFO("load is %d online cpus: %d\n", load, online_cpus);
 	up_load = online_cpus > 1 ? rev.shift_one + 30 : rev.shift_one;
 	down_load = online_cpus > 2 ? rev.down_shift + 25 : rev.down_shift;
 	
-		if (load > rev.shift_all && rev.shift_diff_all < rev.shift_all_threshold 
-			&& online_cpus < rev.max_cpu) {
-				++rev.shift_diff_all;
-				REV_INFO("shift_diff_all is %d\n", rev.shift_diff_all);
-			if (rev.shift_diff_all >= rev.shift_all_threshold) {		
-				hotplug_all();
-				REV_INFO("revshift: Onlining all CPUs, load: %d\n", load);	
-				}		
-		}
-		if (load <= rev.shift_all && rev.shift_diff_all > 0) {
-				rev.shift_diff_all = 0;
-				REV_INFO("shift_diff_all reset to %d\n", rev.shift_diff_all);
-			} 
-		if (load > up_load && rev.shift_diff < rev.shift_threshold 
-			&& online_cpus < rev.max_cpu) {
+		if (load > up_load && online_cpus < rev.max_cpu) {
 				++rev.shift_diff;
 				REV_INFO("shift_diff is %d\n", rev.shift_diff);
-			if (rev.shift_diff >= rev.shift_threshold) {
-				hotplug_one();	
-				}				
-		}
-		if (load <= up_load && rev.shift_diff > 0) {
-				rev.shift_diff = 0;
-				REV_INFO("shift_diff reset to %d\n", rev.shift_diff);
-			}	
-		if (load < down_load && rev.down_diff < rev.downshift_threshold 
-			&& online_cpus > rev.min_cpu) {	
-				++rev.down_diff;
-				REV_INFO("down_diff is %d down_load is %d\n", rev.down_diff, down_load);
-			if (rev.down_diff >= rev.downshift_threshold) {
-					unplug_one();
-				}
-		}
-		if (load >= down_load && rev.down_diff > 0) {	
+			if (rev.down_diff > 0) {
 				--rev.down_diff;
 				REV_INFO("down_diff reset to %d\n", rev.down_diff);
-		}		
+				}
+			if (load > rev.shift_all) {
+				++rev.shift_diff_all;
+				REV_INFO("shift_diff_all is %d\n", rev.shift_diff_all);
+				if (rev.shift_diff_all > rev.shift_all_threshold) 		
+					hotplug_all();		
+			} else if (rev.shift_diff > rev.shift_threshold) 
+					hotplug_one();		
+									
+		} else {	
+			rev.shift_diff = 0;
+			rev.shift_diff_all = 0;
+			if (load < down_load && online_cpus > rev.min_cpu) {
+				++rev.down_diff;
+				REV_INFO("down_diff is %d down_load is %d\n", rev.down_diff, down_load);
+				if (rev.down_diff > rev.downshift_threshold) 
+					unplug_one();
+				}
+		}	
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, msecs_to_jiffies(rev.sample_time));
 	mutex_unlock(&hotplug_lock);
 }
@@ -207,7 +197,7 @@ struct kobject *rev_kobject;
 
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
-(struct kobject *kobj, struct attribute *attr, char *buf)	\
+(struct kobject *kobj, struct attribute *attr, char *buf)		\
 {									\
 	return sprintf(buf, "%u\n", rev.object);			\
 }
