@@ -138,6 +138,7 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 {
 	unsigned int online_cpus, down_load, up_load, load;
 	unsigned int i, total_load = 0;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
 	
 	mutex_lock(&hotplug_lock);
 	get_online_cpus();
@@ -158,7 +159,7 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 		}
 	put_online_cpus();
 	online_cpus = num_online_cpus();
-	load = (total_load * cpufreq_quick_get(0) / cpufreq_quick_get_max(0)) / online_cpus; 
+	load = (total_load * policy->cur / policy->cpuinfo.max_freq) / online_cpus; 
 		REV_INFO("load is %d online cpus: %d\n", load, online_cpus);
 	up_load = online_cpus > 1 ? rev.shift_one + 30 : rev.shift_one;
 	down_load = online_cpus > 2 ? rev.down_shift + 25 : rev.down_shift;
