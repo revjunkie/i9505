@@ -141,7 +141,7 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
 	
 	mutex_lock(&hotplug_lock);
-	get_online_cpus();
+	
 	for_each_online_cpu(i) {
 		struct cpu_info *tmp_info;
 		u64 cur_wall_time, cur_idle_time;
@@ -152,12 +152,12 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 		tmp_info->prev_cpu_idle = cur_idle_time;
 		wall_time = (unsigned int) (cur_wall_time - tmp_info->prev_cpu_wall);
 		tmp_info->prev_cpu_wall = cur_wall_time;
-		if (unlikely(!wall_time || wall_time < idle_time))
-			continue;
+		if (wall_time < idle_time)
+			break;
 		tmp_info->load = 100 * (wall_time - idle_time) / wall_time;
 		total_load += tmp_info->load;
 		}
-	put_online_cpus();
+	
 	online_cpus = num_online_cpus();
 	load = (total_load * policy->cur / policy->cpuinfo.max_freq) / online_cpus; 
 		REV_INFO("load is %d online cpus: %d\n", load, online_cpus);
