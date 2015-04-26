@@ -42,10 +42,10 @@ unsigned int shift_diff_all;
 } rev = {
 	.active = 1,
 	.shift_all = 98,
-	.shift_one = 40,
+	.shift_one = 50,
 	.shift_threshold = 2,
 	.shift_all_threshold = 1,
-	.down_shift = 10,
+	.down_shift = 30,
 	.downshift_threshold = 10,
 	.sample_time = (HZ / 5),
 	.min_cpu = 1,
@@ -161,8 +161,8 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 	online_cpus = num_online_cpus();
 	load = (total_load * policy->cur / policy->cpuinfo.max_freq) / online_cpus; 
 		REV_INFO("load is %d online cpus: %d\n", load, online_cpus);
-	up_load = online_cpus > 1 ? rev.shift_one + 30 : rev.shift_one;
-	down_load = online_cpus > 2 ? rev.down_shift + 25 : rev.down_shift;
+	up_load = online_cpus > 1 ? rev.shift_one : 20;
+	down_load = online_cpus > 2 ? rev.down_shift : 5;
 	
 		if (load > up_load && online_cpus < rev.max_cpu) {
 				++rev.shift_diff;
