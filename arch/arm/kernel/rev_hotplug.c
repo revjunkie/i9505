@@ -42,7 +42,7 @@ unsigned int shift_diff_all;
 } rev = {
 	.active = 1,
 	.shift_all = 98,
-	.shift_one = 50,
+	.shift_one = 60,
 	.shift_threshold = 2,
 	.shift_all_threshold = 1,
 	.down_shift = 30,
@@ -167,8 +167,8 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 		if (load > up_load && online_cpus < rev.max_cpu) {
 				++rev.shift_diff;
 				REV_INFO("shift_diff is %d\n", rev.shift_diff);
-			if (rev.down_diff > 0) {
-				--rev.down_diff;
+			if (rev.down_diff) {
+				rev.down_diff = 0;
 				REV_INFO("down_diff reset to %d\n", rev.down_diff);
 				}
 			if (load > rev.shift_all) {
@@ -220,7 +220,7 @@ static ssize_t __ref store_active(struct kobject *a, struct attribute *b, const 
 	ret = sscanf(buf, "%u", &input);
 	if (ret != 1)
 		return -EINVAL;
-	rev.active = input;
+	rev.active = input > 1 ? 1 : input;
 		if (rev.active) {
 			queue_delayed_work_on(0, hotplug_wq, &hotplug_work, rev.sample_time);
 		} else {
