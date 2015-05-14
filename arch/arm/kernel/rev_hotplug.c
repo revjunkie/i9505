@@ -54,7 +54,6 @@ unsigned int shift_diff_all;
 
 struct cpu_info
 {
-unsigned int cur;
 u64 prev_cpu_idle;
 u64 prev_cpu_wall;
 unsigned int load;
@@ -108,23 +107,21 @@ static inline void hotplug_one(void)
 
 static inline void unplug_one(void)
 {
-	unsigned int i, cpu = 0, i_state = 0;
-	struct cpu_info *idle_info;
+	unsigned int i, idle, cpu = 0, i_state = 0;
 	
-	for (i = 1; i < rev.max_cpu; i++) {
+	for (i = 1; i < rev.max_cpu; ++i) {
 		if (!cpu_online(i))
 			continue;
-			idle_info = &per_cpu(rev_info, i);
-			idle_info->cur = idle_cpu(i);
-			REV_INFO("cpu %u idle state %d\n", i, idle_info->cur);
+			idle = idle_cpu(i);
+			REV_INFO("cpu %u idle state %d\n", i, idle);
 			if (i_state == 0) {
 				cpu = i;
-				i_state = idle_info->cur;
+				i_state = idle;
 				continue;
 			}	
-			if (idle_info->cur > i_state) {
+			if (idle > i_state) {
 				cpu = i;
-				i_state = idle_info->cur;
+				i_state = idle;
 		}
 	}
 	if (cpu != 0 && i_state > 0) { 
@@ -136,12 +133,12 @@ static inline void unplug_one(void)
 
 static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 {
-	unsigned int online_cpus, down_load, up_load, load;
-	unsigned int i, total_load = 0;
-	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
+	unsigned int online_cpus, down_load, up_load, load, load_at_freq;
+	unsigned int i = 0, total_load = 0;
+	struct cpufreq_policy *policy = cpufreq_cpu_get(i);
 	
 	mutex_lock(&hotplug_lock);
-	
+
 	for_each_online_cpu(i) {
 		struct cpu_info *tmp_info;
 		u64 cur_wall_time, cur_idle_time;
@@ -153,13 +150,14 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 		wall_time = (unsigned int) (cur_wall_time - tmp_info->prev_cpu_wall);
 		tmp_info->prev_cpu_wall = cur_wall_time;
 		if (wall_time < idle_time)
-			break;
+			goto queue;
 		tmp_info->load = 100 * (wall_time - idle_time) / wall_time;
-		total_load += tmp_info->load;
+		load_at_freq = (tmp_info->load * policy->cur) / policy->cpuinfo.max_freq;
+		total_load += load_at_freq;
 		}
 	
 	online_cpus = num_online_cpus();
-	load = (total_load * policy->cur / policy->cpuinfo.max_freq) / online_cpus; 
+	load = total_load / online_cpus; 
 		REV_INFO("load is %d online cpus: %d\n", load, online_cpus);
 	up_load = online_cpus > 1 ? rev.shift_one : 20;
 	down_load = online_cpus > 2 ? rev.down_shift : 5;
@@ -188,7 +186,8 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 				if (rev.down_diff > rev.downshift_threshold) 
 					unplug_one();
 				}
-		}	
+		}
+queue:	
 	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, rev.sample_time);
 	mutex_unlock(&hotplug_lock);
 }
@@ -285,7 +284,7 @@ static int __init rev_hotplug_init(void)
 
 	INIT_DELAYED_WORK(&hotplug_work, hotplug_decision_work);
 	if (rev.active)
-	schedule_delayed_work_on(0, &hotplug_work, HZ * 20);
+	schedule_delayed_work_on(0, &hotplug_work, HZ * 60);
 
 	rev_kobject = kobject_create_and_add("rev_hotplug", kernel_kobj);
 	if (rev_kobject) {
