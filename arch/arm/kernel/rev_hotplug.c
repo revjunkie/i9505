@@ -43,11 +43,11 @@ unsigned int shift_diff_all;
 	.active = 1,
 	.shift_all = 98,
 	.shift_one = 60,
-	.shift_threshold = 2,
-	.shift_all_threshold = 1,
+	.shift_threshold = 4,
+	.shift_all_threshold = 2,
 	.down_shift = 30,
-	.downshift_threshold = 10,
-	.sample_time = (HZ / 5),
+	.downshift_threshold = 20,
+	.sample_time = (HZ / 10),
 	.min_cpu = 1,
 	.max_cpu = 4,
 };
@@ -188,7 +188,7 @@ static void  __cpuinit hotplug_decision_work(struct work_struct *work)
 				}
 		}
 queue:	
-	queue_delayed_work_on(0, hotplug_wq, &hotplug_work, rev.sample_time);
+	queue_delayed_work(hotplug_wq, &hotplug_work, rev.sample_time);
 	mutex_unlock(&hotplug_lock);
 }
 
@@ -221,7 +221,7 @@ static ssize_t __ref store_active(struct kobject *a, struct attribute *b, const 
 		return -EINVAL;
 	rev.active = input > 1 ? 1 : input;
 		if (rev.active) {
-			queue_delayed_work_on(0, hotplug_wq, &hotplug_work, rev.sample_time);
+			queue_delayed_work(hotplug_wq, &hotplug_work, rev.sample_time);
 		} else {
 			hotplug_all();
 			flush_workqueue(hotplug_wq);
@@ -280,7 +280,7 @@ static int __init rev_hotplug_init(void)
 	int ret;
 
 	hotplug_wq = alloc_workqueue("hotplug_decision_work",
-				WQ_HIGHPRI, 0);	
+				WQ_FREEZABLE | WQ_UNBOUND,  1);	
 
 	INIT_DELAYED_WORK(&hotplug_work, hotplug_decision_work);
 	if (rev.active)
