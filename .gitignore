@@ -48,7 +48,7 @@ Image
 /System.map
 /Module.markers
 /Module.symvers
-/scripts
+#/scripts
 /arch/arm/boot/compressed
 /out
 #
