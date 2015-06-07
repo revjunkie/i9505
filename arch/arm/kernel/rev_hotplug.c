@@ -23,6 +23,9 @@
 #include <linux/sched.h>
 #include <linux/cpufreq.h>
 #include <linux/tick.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
 
 struct rev_tune
 {
@@ -275,6 +278,30 @@ static struct attribute_group rev_hotplug_group =
 	.name = "tune",
 };
 	
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void rev_hotplug_early_suspend(struct early_suspend *handler)
+{
+	unsigned int cpu;
+
+	for_each_online_cpu(cpu) {
+		if (cpu)
+			cpu_down(cpu);
+	pr_info("rev_hotplug: early suspend\n");
+	}
+}
+
+static void rev_hotplug_late_resume(struct early_suspend *handler)
+{
+	pr_info("rev_hotplug: late resume\n");
+	queue_delayed_work(hotplug_wq, &hotplug_work, rev.sample_time);
+}
+
+static struct early_suspend rev_hotplug_suspend = {
+	.suspend = rev_hotplug_early_suspend,
+	.resume = rev_hotplug_late_resume,
+};
+#endif /* CONFIG_HAS_EARLYSUSPEND */
+
 static int __init rev_hotplug_init(void)
 {
 	int ret;
@@ -294,7 +321,9 @@ static int __init rev_hotplug_init(void)
 		goto err;
 		}
 	}
-
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	register_early_suspend(&rev_hotplug_suspend);
+#endif
 	return 0;
 	
 err:
