@@ -80,6 +80,9 @@ security/selinux/av_permissions.h
 security/selinux/flask.h
 usr/gen_init_cpio
 usr/initramfs_data.cpio
+scripts/kconfig/conf
+scripts/kconfig/mconf
+scripts/recordmcount
 lucid
 lucid_post_boot
 comp
