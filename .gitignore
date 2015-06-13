@@ -30,12 +30,14 @@ modules.builtin
 *.lzma
 *.xz
 *.lzo
+*.lz4
 *.patch
 *.gcno
 *.dtb
 zImage
 zImage-dtb
 Image
+vmlinux
 
 #
 # Top-level generic files
@@ -48,8 +50,6 @@ Image
 /System.map
 /Module.markers
 /Module.symvers
-#/scripts
-/arch/arm/boot/compressed
 /out
 #
 # Debian directory (make deb-pkg)
