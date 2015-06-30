@@ -265,7 +265,7 @@ static struct attribute_group rev_hotplug_group =
 static void rev_hotplug_early_suspend(struct early_suspend *handler)
 {
 	unsigned int cpu;
-
+	if (rev.active) 
 	for_each_online_cpu(cpu) {
 		if (cpu)
 			cpu_down(cpu);
@@ -273,10 +273,12 @@ static void rev_hotplug_early_suspend(struct early_suspend *handler)
 	}
 }
 
-static void rev_hotplug_late_resume(struct early_suspend *handler)
+static void __ref rev_hotplug_late_resume(struct early_suspend *handler)
 {
+	if (rev.active) {
 	pr_info("rev_hotplug: late resume\n");
-	queue_delayed_work(hotplug_wq, &hotplug_work, rev.sample_time);
+	plug_cpu(rev.max_cpu);
+	}
 }
 
 static struct early_suspend rev_hotplug_suspend = {
