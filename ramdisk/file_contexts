@@ -184,6 +184,7 @@
 /data/resource-cache(/.*)? u:object_r:resourcecache_data_file:s0
 /data/dalvik-cache(/.*)? u:object_r:dalvikcache_data_file:s0
 /data/dalvik-cache/profiles(/.*)? u:object_r:dalvikcache_profiles_data_file:s0
+/data/adb(/.*)?		u:object_r:adb_data_file:s0
 /data/anr(/.*)?		u:object_r:anr_data_file:s0
 /data/app(/.*)?                       u:object_r:apk_data_file:s0
 /data/app/vmdl.*\.tmp(/.*)?           u:object_r:apk_tmp_file:s0
@@ -218,6 +219,9 @@
 /data/misc/wifi/sockets/wpa_ctrl.*   u:object_r:system_wpa_socket:s0
 /data/misc/wifi/hostapd(/.*)?   u:object_r:wpa_socket:s0
 /data/misc/zoneinfo(/.*)?       u:object_r:zoneinfo_data_file:s0
+
+# coredump directory for userdebug/eng devices
+/cores(/.*)?                    u:object_r:coredump_file:s0
 
 # Wallpaper file for other users
 /data/system/users/[0-9]+/wallpaper		u:object_r:wallpaper_file:s0
@@ -568,6 +572,7 @@
 /dev/icd                u:object_r:icd_device:s0
 /dev/icdr               u:object_r:icd_device:s0
 /dev/ionfd2phys         u:object_r:ion_device:s0
+/dev/isdbt                      u:object_r:mmb_device:s0
 # conflict with Qcom BSP, /dev/media[0-3]*	u:object_r:camera_device:s0
 /dev/mobicore	u:object_r:mobicore_device:s0
 /dev/mobicore-user	u:object_r:mobicore-user_device:s0
@@ -622,7 +627,7 @@
 /dev/dek_evt	u:object_r:knox_dar_device:s0
 /dev/dek_kek	u:object_r:knox_dar_device:s0
 /dev/dek_log	u:object_r:knox_dar_device:s0
-/dev/dek_req	u:object_r:knox_dar_device:s0
+/dev/dek_req	u:object_r:knox_dar_shared_device:s0
 /dev/sdp_mm	u:object_r:knox_dar_device:s0
 /dev/knox_kap	u:object_r:knox_kap_device:s0
 
@@ -645,6 +650,7 @@
 /dev/coresight-.*                                u:object_r:coresight_device:s0
 /dev/dbd[0-9]*		u:object_r:adnc_device:s0
 /dev/dun	u:object_r:dun_device:s0
+/dev/dvb(/.*)?  u:object_r:dvb_device:s0
 # conflict with Qcom BSP, /dev/efs_bridge	u:object_r:radio_device:s0
 # conflict with Qcom BSP, /dev/efs_hsic_bridge u:object_r:radio_device:s0
 # conflict with Qcom BSP, /dev/esoc-[0-9]*       u:object_r:esoc_device:s0
@@ -723,7 +729,8 @@
 /dev/ecryptfs		u:object_r:ecryptfs_device:s0
 /dev/ehci_power         u:object_r:mif_device:s0
 /dev/fimg2d(/.*)?     	u:object_r:fimg2d_video_device:s0
-/dev/gps_geofence_wake			u:object_r:gps_device:s0 
+/dev/gps_geofence_wake			u:object_r:gps_device:s0
+/dev/invensense			u:object_r:sensors_device:s0
 /dev/keychord		u:object_r:keychord_device:s0
 /dev/kfc_freq_min	u:object_r:ap_device:s0
 /dev/link_pm		u:object_r:radio_device:s0
@@ -766,6 +773,7 @@
 /sys/class/sec(/.*)?                --               u:object_r:sysfs_sec:s0
 /sys/class/sensors(/.*)?            --               u:object_r:sysfs_sensor_writable:s0
 /sys/class/tcon(/.*)?	--                 u:object_r:sysfs_tcon_writable:s0
+/sys/devices/virtual/sec/sec_epen(/.*)?		--	u:object_r:sysfs_sec:s0
 # Remove because of restorecon_recursive_symlink /sys/devices/virtual/sec(/.*)?      --               u:object_r:sysfs_sec:s0
 /sys/qemu_trace(/.*)?	--	u:object_r:sysfs_writable:s0
 
@@ -833,6 +841,7 @@
 /system/bin/IPSecService	u:object_r:IPSecService_exec:s0
 /system/bin/jackservice		u:object_r:jackservice_exec:s0
 /system/bin/kiesexe	u:object_r:kiesexe_exec:s0
+/system/bin/launcher	u:object_r:launcher_exec:s0
 #/system/bin/logwrapper	u:object_r:logwrapper_exec:s0
 /system/bin/lptcpController     u:object_r:lptcpgc_exec:s0
 #/system/bin/mdnsd	u:object_r:mdnsd_exec:s0
@@ -868,6 +877,18 @@
 /system/bin/vpnclientd          u:object_r:vpnclientd_exec:s0
 # conflict with Qcom BSP, /system/bin/wcnss_service	u:object_r:wcnss_service_exec:s0
 /system/bin/wpa_supplicant_real u:object_r:wpa_exec:s0
+# to run resopt on system_server
+/system/bin/resopt	u:object_r:system_file:s0
+# to run zip on resopt, on system_server
+/system/bin/zip 	u:object_r:system_file:s0
+
+#ISDBT
+/system/bin/broadcastProcessObserver_ltn	u:object_r:oneseg_mw_exec:s0
+/system/bin/OneSegControl	u:object_r:oneseg_mw_exec:s0
+/system/bin/OneSegDsmcc_ltn	u:object_r:oneseg_mw_exec:s0
+/system/bin/OneSegGinga	u:object_r:oneseg_mw_exec:s0
+/system/bin/OneSegTsDemux_ltn	u:object_r:oneseg_mw_exec:s0
+/system/bin/SMPlayer_fullseg	u:object_r:oneseg_mw_exec:s0
 
 /system/etc/event-log-tags	u:object_r:event_log_tags_file:s0
 /system/etc/dhcpcd(/.*)? u:object_r:dhcp_system_file:s0
@@ -973,6 +994,7 @@
 /data/misc/radio(/.*)?	u:object_r:radio_data_file:s0
 /data/misc/tima(/.*)?		u:object_r:tima_log:s0
 /data/misc/vpnclientd(/.*)?     u:object_r:vpnclientd_data_file:s0
+/data/one-seg(/.*)? u:object_r:oneseg_data_file:s0
 # personalpage path is not used  by (hyojin45.son)
 # /data/personalpage(/.*)?	u:object_r:personal_page_file:s0
 # new path for personalpage is privatemode.K is first model for personalpage.
@@ -1033,6 +1055,7 @@
 /efs/security(/.*)?                              u:object_r:prov_efs_file:s0
 /efs/sktdm_mem(/.*)?                             u:object_r:sec_efs_file:s0
 /efs/SMS(/.*)?                                   u:object_r:sec_efs_file:s0
+/efs/SlideCount                                  u:object_r:app_efs_file:s0
 /efs/TEE(/.*)?                                   u:object_r:prov_efs_file:s0
 /efs/wifi(/.*)?	u:object_r:wifi_efs_file:s0
 /efs_gsm(/.*)?            u:object_r:efs_gsm_file:s0
