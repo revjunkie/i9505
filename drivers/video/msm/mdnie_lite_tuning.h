@@ -20,11 +20,8 @@
 #define _MDNIE_LITE_TUNING_H_
 
 #define LDI_COORDINATE_REG 0xA1
-#if defined(CONFIG_FB_MSM_MIPI_HX8389B_TFT_VIDEO_QHD_PT_PANEL)
-#define MDNIE_TUNE_FIRST_SIZE 113
-#else
+
 #define MDNIE_TUNE_FIRST_SIZE 108
-#endif
 #define MDNIE_TUNE_SECOND_SIZE 5
 
 #define MDNIE_COLOR_BLIND_FIRST_SIZE 118
@@ -76,9 +73,6 @@ enum Lcd_mDNIe_UI {
 	mDNIe_BROWSER_MODE,
 	mDNIe_eBOOK_MODE,
 	mDNIE_BLINE_MODE,
-#if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OCTA_VIDEO_FULL_HD_PT_PANEL)
-	mDNIE_DARK_SCREEN_MODE,
-#endif
 #if defined(CONFIG_TDMB)
 	mDNIe_DMB_MODE = 20,
 	mDNIe_DMB_WARM_MODE,
@@ -118,9 +112,6 @@ enum ACCESSIBILITY {
         ACCESSIBILITY_OFF,
         NEGATIVE,
         COLOR_BLIND,
- #if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OCTA_VIDEO_FULL_HD_PT_PANEL)
-        DARK_SCREEN,
- #endif
         ACCESSIBILITY_MAX,
 };
 
@@ -136,9 +127,6 @@ struct mdnie_lite_tun_type {
 void mdnie_lite_tuning_init(void);
 void init_mdnie_class(void);
 void is_negative_on(void);
-#if defined(CONFIG_FB_MSM_MIPI_RENESAS_TFT_VIDEO_FULL_HD_PT_PANEL)
-int is_cabc_on ( void );
-#endif
 
 void coordinate_tunning(int x, int y);
 

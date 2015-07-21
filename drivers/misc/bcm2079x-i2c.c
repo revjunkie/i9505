@@ -469,7 +469,6 @@ static int bcm2079x_probe(struct i2c_client *client,
 	 * for reading.  it is cleared when all data has been read.
 	 */
 	iIrq = gpio_to_irq(client->irq);
-	client->irq = iIrq;
 	dev_info(&client->dev, "requesting IRQ %d with IRQF_NO_SUSPEND\n",
 		iIrq);
 	wake_lock_init(&bcm2079x_dev->bcm_wake_lock, WAKE_LOCK_SUSPEND,
@@ -558,16 +557,12 @@ static struct i2c_driver bcm2079x_driver = {
 
 static int __init bcm2079x_dev_init(void)
 {
-#ifdef CONFIG_SAMSUNG_LPM_MODE
 	if (!poweroff_charging)
 		return i2c_add_driver(&bcm2079x_driver);
 	else {
 		pr_info("[NFC] %s - power off charging\n", __func__);
 		return -1;
 	}
-#else
-	return i2c_add_driver(&bcm2079x_driver);
-#endif
 }
 module_init(bcm2079x_dev_init);
 

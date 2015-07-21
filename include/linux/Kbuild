@@ -20,7 +20,6 @@ header-y += netfilter_ipv6/
 header-y += usb/
 header-y += wimax/
 header-y += mfd/
-header-y += tima/
 
 objhdr-y += version.h
 
@@ -441,7 +440,6 @@ header-y += msm_audio_sbc.h
 header-y += msm_ipc.h
 header-y += msm_charm.h
 header-y += msm_rmnet.h
-header-y += rmnet_data.h
 header-y += qseecom.h
 header-y += qcedev.h
 header-y += idle_stats_device.h

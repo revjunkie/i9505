@@ -40,9 +40,7 @@
 #include "mipi_dsi.h"
 #include "mdp.h"
 #include "mdp4.h"
-#ifdef CONFIG_SEC_DEBUG_MDP
 #include "sec_debug_mdp.h"
-#endif
 
 static struct completion dsi_dma_comp;
 static struct completion dsi_mdp_comp;
@@ -61,9 +59,7 @@ static struct list_head pre_kickoff_list;
 static struct list_head post_kickoff_list;
 
 struct work_struct mdp_reset_work;
-#ifdef CONFIG_SEC_DEBUG_MDP
 extern struct sec_debug_mdp sec_debug_mdp;
-#endif
 
 void mipi_dsi_configure_dividers(int fps);
 
@@ -206,7 +202,7 @@ void mipi_dsi_clk_cfg(int on)
 	mutex_lock(&clk_mutex);
 	if (on) {
 		if (dsi_clk_cnt == 0) {
-			mipi_dsi_prepare_clocks();
+			mipi_dsi_prepare_ahb_clocks();
 			mipi_dsi_ahb_ctrl(1);
 			mipi_dsi_clk_enable();
 		}
@@ -216,8 +212,9 @@ void mipi_dsi_clk_cfg(int on)
 			dsi_clk_cnt--;
 			if (dsi_clk_cnt == 0) {
 				mipi_dsi_clk_disable();
-				mipi_dsi_ahb_ctrl(0);
 				mipi_dsi_unprepare_clocks();
+				mipi_dsi_ahb_ctrl(0);
+				mipi_dsi_unprepare_ahb_clocks();
 			}
 		}
 	}
@@ -228,6 +225,7 @@ void mipi_dsi_clk_cfg(int on)
 
 void mipi_dsi_turn_on_clks(void)
 {
+	mipi_dsi_prepare_ahb_clocks();
 	mipi_dsi_ahb_ctrl(1);
 	mipi_dsi_clk_enable();
 }
@@ -235,7 +233,9 @@ void mipi_dsi_turn_on_clks(void)
 void mipi_dsi_turn_off_clks(void)
 {
 	mipi_dsi_clk_disable();
+	mipi_dsi_unprepare_clocks();
 	mipi_dsi_ahb_ctrl(0);
+	mipi_dsi_unprepare_ahb_clocks();
 }
 
 static void mipi_dsi_action(struct list_head *act_list)
@@ -932,14 +932,9 @@ void mipi_dsi_host_init(struct mipi_panel_info *pinfo)
 	if (pinfo->data_lane0)
 		dsi_ctrl |= BIT(4);
 
-#if defined(CONFIG_MIPI_DSI_LP_CMD_SEND)
-		/* from frame buffer, low power mode */
-		/* DSI_COMMAND_MODE_DMA_CTRL */
-		MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x14000000);
-#else
-		/* send commands in High Speed Mode */
-		MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);
-#endif
+	/* from frame buffer, low power mode */
+	/* DSI_COMMAND_MODE_DMA_CTRL */
+	MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);
 
 	data = 0;
 	if (pinfo->te_sel)
@@ -1068,7 +1063,7 @@ void mipi_dsi_op_mode_config(int mode)
 }
 
 
-static void mipi_dsi_wait4video_done(void)
+void mipi_dsi_wait4video_done(void)
 {
 	unsigned long flag;
 
@@ -1197,6 +1192,7 @@ int mipi_dsi_cmds_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
 	struct dsi_cmd_desc *cm;
 	uint32 dsi_ctrl, ctrl;
 	int i, video_mode;
+
 	/* turn on cmd mode
 	* for video mode, do not send cmds more than
 	* one pixel line, since it only transmit it
@@ -1244,6 +1240,7 @@ int mipi_dsi_cmds_single_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds,
 	int i, j = 0, k = 0, cmd_len = 0, video_mode;
 	char *cmds_tx;
 	char *bp;
+
 	if (tp == NULL || cmds == NULL) {
 		pr_err("%s: Null commands", __func__);
 		return -EINVAL;
@@ -1558,157 +1555,6 @@ int mipi_dsi_cmds_rx_new(struct dsi_buf *tp, struct dsi_buf *rp,
 
 	return rp->len;
 }
-#if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OLED_VIDEO_WVGA_PT) && defined(CONFIG_MACH_COMANCHE)
-/*embedding max pkt size cmd and NULL pkt in one burst*/
-static char null_pkt1[8] = {0x00, 0x00, 0x09, 0x40, 0x01, 0x00, 0x37, 0x80};
-
-int mipi_dsi_cmds_rx_lp(struct msm_fb_data_type *mfd,
-			struct dsi_buf *tp, struct dsi_buf *rp,
-			char *cmds, int rlen)
-{
-	int cnt, len, diff, video_mode;
-	unsigned long flag;
-	char cmd;
-
-	uint32 dsi_ctrl, ctrl;
-
-	if (mfd->panel_info.mipi.no_max_pkt_size) {
-		/* Only support rlen = 4*n */
-		rlen += 3;
-		rlen &= ~0x03;
-	}
-
-	len = rlen;
-	diff = 0;
-
-	if (len <= 2)
-		cnt = 4;	/* short read */
-	else {
-		if (len > MIPI_DSI_LEN)
-			len = MIPI_DSI_LEN;	/* 8 bytes at most */
-
-		len = (len + 3) & ~0x03; /* len 4 bytes align */
-		diff = len - rlen;
-		/*
-		 * add extra 2 bytes to len to have overall
-		 * packet size is multipe by 4. This also make
-		 * sure 4 bytes dcs headerlocates within a
-		 * 32 bits register after shift in.
-		 * after all, len should be either 6 or 10.
-		 */
-		len += 2;
-		cnt = len + 6; /* 4 bytes header + 2 bytes crc */
-	}
-
-
-	/* turn on cmd mode
-	* for video mode, do not send cmds more than
-	* one pixel line, since it only transmit it
-	* during BLLP.
-	*/
-	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
-	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
-	if (video_mode) {
-		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
-		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
-	}
-
-	spin_lock_irqsave(&dsi_mdp_lock, flag);
-	mipi_dsi_enable_irq(DSI_CMD_TERM);
-	dsi_mdp_busy = TRUE;
-	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
-
-	if (!mfd->panel_info.mipi.no_max_pkt_size) {
-		mipi_dsi_buf_init(tp);
-		tp->len = 8;
-		memcpy(tp->start, null_pkt1, tp->len);
-		tp->data = tp->start;
-		/* transmit read comamnd to client */
-		if (video_mode)
-			mdp4_dsi_video_wait4dmap_for_dsi(0);
-
-		mipi_dsi_cmd_dma_tx(tp);
-	}
-
-	/*
-	 * once cmd_dma_done interrupt received,
-	 * return data from client is ready and stored
-	 * at RDBK_DATA register already
-	 */
-	mipi_dsi_enable_irq(DSI_CMD_TERM);
-	mipi_dsi_buf_init(tp);
-	tp->len = 8;
-	memcpy(tp->start, cmds, tp->len);
-	tp->data = tp->start;
-	/* transmit read comamnd to client */
-	if (video_mode)
-		mdp4_dsi_video_wait4dmap_for_dsi(0);
-
-	mipi_dsi_cmd_dma_tx(tp);
-	mipi_dsi_disable_irq(DSI_CMD_TERM);
-
-	/*
-	 * expect rlen = n * 4
-	 * short alignement for start addr
-	 */
-	if (mfd->panel_info.mipi.no_max_pkt_size)
-		rp->data += 2;
-
-	mipi_dsi_cmd_dma_rx(rp, cnt);
-
-
-	/*restore*/
-	if (video_mode)
-		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl);
-
-	spin_lock_irqsave(&dsi_mdp_lock, flag);
-	dsi_mdp_busy = FALSE;
-	mipi_dsi_disable_irq(DSI_CMD_TERM);
-	complete(&dsi_mdp_comp);
-	spin_unlock_irqrestore(&dsi_mdp_lock, flag);
-
-	/*
-	 * remove extra 2 bytes from previous
-	 * rx transaction at shift register
-	 * which was inserted during copy
-	 * shift registers to rx buffer
-	 * rx payload start from long alignment addr
-	 */
-	if (mfd->panel_info.mipi.no_max_pkt_size)
-		rp->data += 2;
-
-	cmd = rp->data[0];
-	switch (cmd) {
-	case DTYPE_ACK_ERR_RESP:
-		pr_debug("%s: rx ACK_ERR_PACLAGE\n", __func__);
-		break;
-	case DTYPE_GEN_READ1_RESP:
-	case DTYPE_DCS_READ1_RESP:
-		pr_debug("%s: rx DTYPE_DCS_READ1_RESP\n", __func__);
-		mipi_dsi_short_read1_resp(rp);
-		break;
-	case DTYPE_GEN_READ2_RESP:
-	case DTYPE_DCS_READ2_RESP:
-		pr_debug("%s: rx DTYPE_DCS_READ2_RESP\n", __func__);
-
-		mipi_dsi_short_read2_resp(rp);
-		break;
-	case DTYPE_GEN_LREAD_RESP:
-	case DTYPE_DCS_LREAD_RESP:
-		pr_debug("%s: rx DTYPE_DCS_LREAD_RESP\n", __func__);
-
-		mipi_dsi_long_read_resp(rp);
-		rp->len -= 2; /* extra 2 bytes added */
-		rp->len -= diff; /* align bytes */
-		break;
-	default:
-		pr_err("%s: rx default !!! : %x\n", __func__, cmd);
-		break;
-	}
-
-	return rp->len;
-}
-#endif
 
 #define MIPI_DSI_ERROR_DUMP
 
@@ -1845,9 +1691,7 @@ int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 		pr_err("%s: dma timeout error\n", __func__);
 		dumpreg(0);
 		dumstate(0);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_tx_time_out_err_cnt++;
-#endif
 		mdp4_dump_regs();
 		dsi_clk_dump();
 		console_verbose();
@@ -2082,9 +1926,7 @@ void mipi_dsi_ack_err_status(void)
 
 	if (status) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0064, status);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_ack_err_status = status;
-#endif
 		/*
 		 * base on hw enginner, write an extra 0 needed
 		 * to clear error bits
@@ -2101,9 +1943,7 @@ void mipi_dsi_timeout_status(void)
 	status = MIPI_INP(MIPI_DSI_BASE + 0x00bc);/* DSI_TIMEOUT_STATUS */
 	if (status & 0x0111) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x00bc, status);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_timeout_status = status;
-#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -2116,9 +1956,7 @@ void mipi_dsi_dln0_phy_err(void)
 
 	if (status & 0x011111) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x00b0, status);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_dln0_phy_err = status;
-#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -2131,9 +1969,7 @@ void mipi_dsi_fifo_status(void)
 
 	if (status & 0x44444489) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0008, status);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_fifo_status = status;
-#endif
 		pr_err("%s: Error: status=%x\n", __func__, status);
 		mipi_dsi_sw_reset();
 		schedule_work(&mdp_reset_work);
@@ -2148,9 +1984,7 @@ void mipi_dsi_status(void)
 
 	if (status & 0x80000000) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0004, status);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_status = status;
-#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -2187,16 +2021,13 @@ int mipi_runtime_clk_change(int fps)
 
 	if (!rc) {
 		pr_err("%s: dma timeout error\n", __func__);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.fps_chage_time_out_err_cnt++;
-#endif
 	}
 		
 	mutex_unlock(&fps_done_mutex);
 
 	return rc;
 }
-#endif
 
 #if defined(CONFIG_FB_MSM_CAMERA_CSC)
 extern int csc_updated;
@@ -2227,15 +2058,14 @@ int mipi_runtime_csc_update(uint32_t reg[][2], int length)
 
 	if (!rc) {
 		pr_err("%s: dma timeout error\n", __func__);
-#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.fps_chage_time_out_err_cnt++;
-#endif
 	}
 		
 	mutex_unlock(&fps_done_mutex);
 
 	return rc;
 }
+#endif
 #endif
 
 irqreturn_t mipi_dsi_isr(int irq, void *ptr)
@@ -2278,12 +2108,10 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 			complete(&dsi_video_comp);
 			spin_unlock(&dsi_mdp_lock);
 		} else if (csc_updated) {
-#if !defined(CONFIG_SEC_PRODUCT_8930)
 			if (inpdw(MDP_BASE+0x90014)) {
 				pr_debug("%s VIDEO_ENGINE BUSY", __func__);
-
+				
 			} else {
-#endif
 				int loop = 0;
 				for (loop = 0; loop < csc_length; loop++) {
 					outpdw(csc_reg[loop][0], csc_reg[loop][1]);
@@ -2295,9 +2123,8 @@ irqreturn_t mipi_dsi_isr(int irq, void *ptr)
 				complete(&dsi_fps_comp);
 				pr_info("%s CSC update done \n", __func__);
 				pr_debug("%s VIDEO_ENGINE NOT BUSY", __func__);
-#if !defined(CONFIG_SEC_PRODUCT_8930)
 			}
-#endif
+
 			spin_lock(&dsi_mdp_lock);
 			complete(&dsi_video_comp);
 			spin_unlock(&dsi_mdp_lock);

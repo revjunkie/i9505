@@ -57,7 +57,6 @@
 #define OUT_BUFFER_SIZE 56
 #define IN_BUFFER_SIZE 24
 #endif
-#define FRAME_NUM   (8)
 static DEFINE_MUTEX(session_lock);
 extern int32_t ep_data;
 /* session id: 0 reserved */
@@ -258,8 +257,10 @@ int q6asm_audio_client_buf_free(unsigned int dir,
 					 __func__,
 				PTR_ERR((void *)port->buf[cnt].mem_buffer));
 				else {
-					iounmap(
-						port->buf[cnt].mem_buffer);
+					if (iounmap(
+						port->buf[cnt].mem_buffer) < 0)
+						pr_err("%s: unmap buffer failed\n",
+								 __func__);
 				}
 				free_contiguous_memory_by_paddr(
 					port->buf[cnt].phys);
@@ -324,8 +325,9 @@ int q6asm_audio_client_buf_free_contiguous(unsigned int dir,
 				 __func__,
 				PTR_ERR((void *)port->buf[0].mem_buffer));
 		else {
-			iounmap(
-				port->buf[0].mem_buffer);
+			if (iounmap(
+				port->buf[0].mem_buffer) < 0)
+				pr_err("%s: unmap buffer failed\n", __func__);
 		}
 		free_contiguous_memory_by_paddr(port->buf[0].phys);
 #endif
@@ -508,9 +510,6 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 			pr_debug("%s: buffer already allocated\n", __func__);
 			return 0;
 		}
-
-		if (bufcnt != FRAME_NUM)
-			goto fail;
 		mutex_lock(&ac->cmd_lock);
 		buf = kzalloc(((sizeof(struct audio_buffer))*bufcnt),
 				GFP_KERNEL);
@@ -576,6 +575,7 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 					}
 					memset((void *)buf[cnt].data, 0, bufsz);
 #else
+					unsigned int flags = 0;
 					buf[cnt].phys =
 					allocate_contiguous_ebi_nomap(bufsz,
 						SZ_4K);
@@ -642,6 +642,8 @@ int q6asm_audio_client_buf_alloc_contiguous(unsigned int dir,
 	struct audio_buffer *buf;
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	int len;
+#else
+	int flags = 0;
 #endif
 	if (!(ac) || ((dir != IN) && (dir != OUT)))
 		return -EINVAL;

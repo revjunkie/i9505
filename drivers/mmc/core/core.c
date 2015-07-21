@@ -45,16 +45,6 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 
-#ifdef CONFIG_MMC_SUPPORT_STLOG
-#include <linux/stlog.h>
-#else
-#define ST_LOG(fmt,...)
-#endif
-
-#if defined(CONFIG_BCM4334) || defined(CONFIG_BCM4334_MODULE)
-#include "../host/msm_sdcc.h"
-#endif
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
 
@@ -972,11 +962,7 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	if (data->flags & MMC_DATA_WRITE)
 		mult <<= card->csd.r2w_factor;
 
-	/* max time value is 4.2s */
-	if ((card->csd.tacc_ns/1000 * mult) > 4294967)
-		data->timeout_ns = 0xffffffff;
-	else
-		data->timeout_ns = card->csd.tacc_ns * mult;
+	data->timeout_ns = card->csd.tacc_ns * mult;
 	data->timeout_clks = card->csd.tacc_clks * mult;
 
 	/*
@@ -1674,14 +1660,6 @@ void mmc_power_off(struct mmc_host *host)
 	mmc_host_clk_release(host);
 }
 
-void mmc_power_cycle(struct mmc_host *host)
-{
-	mmc_power_off(host);
-	/* Wait at least 1 ms according to SD spec */
-	mmc_delay(1);
-	mmc_power_up(host);
-}
-
 /*
  * Cleanup when the last reference to the bus operator is dropped.
  */
@@ -2349,7 +2327,7 @@ int mmc_can_reset(struct mmc_card *card)
 	if (mmc_card_sdio(card))
 		return 0;
 
-	if (mmc_card_mmc(card) && (card->host->caps & MMC_CAP_HW_RESET)) {
+	if (mmc_card_mmc(card)) {
 		rst_n_function = card->ext_csd.rst_n_function;
 		if ((rst_n_function & EXT_CSD_RST_N_EN_MASK) !=
 		    EXT_CSD_RST_N_ENABLED)
@@ -2366,6 +2344,9 @@ static int mmc_do_hw_reset(struct mmc_host *host, int check)
 	if (!host->bus_ops->power_restore)
 		return -EOPNOTSUPP;
 
+	if (!(host->caps & MMC_CAP_HW_RESET) || !host->ops->hw_reset)
+		return -EOPNOTSUPP;
+
 	if (!card)
 		return -EINVAL;
 
@@ -2375,10 +2356,7 @@ static int mmc_do_hw_reset(struct mmc_host *host, int check)
 	mmc_host_clk_hold(host);
 	mmc_set_clock(host, host->f_init);
 
-	if (mmc_card_sd(card) && host->ops->hw_reset)
-		host->ops->hw_reset(host);
-	else
-		mmc_power_cycle(host);
+	host->ops->hw_reset(host);
 
 	/* If the reset has happened, then a status command will fail */
 	if (check) {
@@ -2834,7 +2812,6 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	if (ret) {
 		mmc_card_set_removed(host->card);
 		pr_debug("%s: card remove detected\n", mmc_hostname(host));
-		ST_LOG("<%s> %s: card remove detected\n", __func__,mmc_hostname(host));
 	}
 
 	return ret;
@@ -2930,8 +2907,6 @@ void mmc_rescan(struct work_struct *work)
 
 	if (host->ops->get_cd && host->ops->get_cd(host) == 0)
 		goto out;
-
-	ST_LOG("<%s> %s insertion detected",__func__,host->class_dev.kobj.name);
 
 	mmc_claim_host(host);
 	if (!mmc_rescan_try_freq(host, host->f_min))
@@ -3193,6 +3168,9 @@ int mmc_suspend_host(struct mmc_host *host)
 		return -EAGAIN;
 	else
 		mmc_flush_scheduled_work();
+	err = mmc_cache_ctrl(host, 0);
+	if (err)
+		goto out;
 
 	mmc_bus_get(host);
 	if (host->bus_ops && !host->bus_dead) {
@@ -3249,6 +3227,7 @@ int mmc_suspend_host(struct mmc_host *host)
 	if (!host->card || host->index == 2)
 		mdelay(50);
 
+out:
 	return err;
 stop_bkops_err:
 	if (!(host->card && mmc_card_sdio(host->card)))
@@ -3315,9 +3294,6 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 {
 	struct mmc_host *host = container_of(
 		notify_block, struct mmc_host, pm_notify);
-#if defined(CONFIG_BCM4334) || defined(CONFIG_BCM4334_MODULE)
-	struct msmsdcc_host *msmhost = mmc_priv(host);
-#endif
 	unsigned long flags;
 
 	int err = 0;
@@ -3372,12 +3348,6 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
 
-#if defined(CONFIG_BCM4334) || defined(CONFIG_BCM4334_MODULE)
-		if (host->card && msmhost && msmhost->pdev_id == 4)
-			printk(KERN_INFO"%s(): WLAN SKIP DETECT CHANGE\n",
-					__func__);
-		else
-#endif
 		mmc_detect_change(host, 0);
 
 	}

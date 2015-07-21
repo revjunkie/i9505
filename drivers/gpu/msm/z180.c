@@ -158,7 +158,7 @@ static struct z180_device device_2d0 = {
 		.mem_log = KGSL_LOG_LEVEL_DEFAULT,
 		.pwr_log = KGSL_LOG_LEVEL_DEFAULT,
 		.ft_log = KGSL_LOG_LEVEL_DEFAULT,
-		.pm_dump_enable = 0,
+		.pm_dump_enable = 1,
 	},
 	.cmdwin_lock = __SPIN_LOCK_INITIALIZER(device_2d1.cmdwin_lock),
 };
@@ -192,7 +192,7 @@ static struct z180_device device_2d1 = {
 		.mem_log = KGSL_LOG_LEVEL_DEFAULT,
 		.pwr_log = KGSL_LOG_LEVEL_DEFAULT,
 		.ft_log = KGSL_LOG_LEVEL_DEFAULT,
-		.pm_dump_enable = 0,
+		.pm_dump_enable = 1,
 	},
 	.cmdwin_lock = __SPIN_LOCK_INITIALIZER(device_2d1.cmdwin_lock),
 };
@@ -248,22 +248,12 @@ static void z180_cleanup_pt(struct kgsl_device *device,
 			       struct kgsl_pagetable *pagetable)
 {
 	struct z180_device *z180_dev = Z180_DEVICE(device);
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
-	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
 
-	kgsl_mmu_unmap(pagetable, &device->memstore);
-	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
-
-	kgsl_mmu_unmap(pagetable, &z180_dev->ringbuffer.cmdbufdesc);
-	kgsl_mmu_put_gpuaddr(pagetable, &z180_dev->ringbuffer.cmdbufdesc);
-#else
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
 
 	kgsl_mmu_unmap(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &z180_dev->ringbuffer.cmdbufdesc);
-#endif
 }
 
 static int z180_setup_pt(struct kgsl_device *device,
@@ -296,15 +286,9 @@ static int z180_setup_pt(struct kgsl_device *device,
 
 error_unmap_dummy:
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
-#endif
 
 error_unmap_memstore:
 	kgsl_mmu_unmap(pagetable, &device->memstore);
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
-#endif
 
 error:
 	return result;

@@ -458,7 +458,7 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 		return ERR_PTR(-ENODEV);
 
 	if (IS_ERR(buffer)) {
-		pr_info("ION is unable to allocate 0x%x bytes (alignment: "
+		pr_debug("ION is unable to allocate 0x%x bytes (alignment: "
 			 "0x%x) from heap(s) %sfor client %s with heap "
 			 "mask 0x%x\n",
 			len, align, dbg_str, client->name, client->heap_mask);
@@ -624,7 +624,7 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 			unsigned long flags, unsigned long iommu_flags)
 {
 	struct ion_buffer *buffer;
-	struct ion_iommu_map *iommu_map = NULL;
+	struct ion_iommu_map *iommu_map;
 	int ret = 0;
 
 	if (client == NULL) {
@@ -703,12 +703,6 @@ int ion_map_iommu(struct ion_client *client, struct ion_handle *handle,
 			if (iommu_map->flags & ION_IOMMU_UNMAP_DELAYED)
 				kref_get(&iommu_map->ref);
 		}
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-		else {
-            ret = -EINVAL;
-            goto out;
-        }
-#endif
 	} else {
 		if (iommu_map->flags != iommu_flags) {
 			pr_err("%s: handle %p is already mapped with iommu flags %lx, trying to map with flags %lx\n",

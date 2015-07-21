@@ -24,11 +24,6 @@
 #endif
 static unsigned int run_cnt;
 
-/* MMRND_AVRC. Start */
-#define QCIF_WIDTH   176
-#define QCIF_HEIGHT  144
-/* MMRND_AVRC. End */
-
 void ddl_vidc_core_init(struct ddl_context *ddl_context)
 {
 	struct vidc_1080P_pix_cache_config pixel_cache_config;
@@ -612,13 +607,6 @@ void ddl_vidc_encode_init_codec(struct ddl_client_context *ddl)
 		encoder->frame_size.height);
 	vidc_1080p_encode_set_qp_params(encoder->qp_range.max_qp,
 		encoder->qp_range.min_qp);
-	vidc_sm_set_i_frame_qp(&ddl->shared_mem[ddl->command_channel],
-		encoder->qp_range.max_qp,
-		encoder->qp_range.min_qp);
-	if (encoder->session_qp.i_frame_qp < encoder->qp_range.min_qp)
-		encoder->session_qp.i_frame_qp = encoder->qp_range.min_qp;
-	if (encoder->session_qp.i_frame_qp > encoder->qp_range.max_qp)
-		encoder->session_qp.i_frame_qp = encoder->qp_range.max_qp;
 	vidc_1080p_encode_set_rc_config(encoder->rc_level.frame_level_rc,
 		encoder->rc_level.mb_level_rc,
 		encoder->session_qp.i_frame_qp);
@@ -633,17 +621,8 @@ void ddl_vidc_encode_init_codec(struct ddl_client_context *ddl)
 		(DDL_FRAMERATE_SCALE(DDL_INITIAL_FRAME_RATE)
 		 != scaled_frame_rate))
 		h263_cpfc_enable = true;
-/* MMRND_AVRC. Start */
-/* pic_order_cnt_type = 2 */
 	if (encoder->codec.codec == VCD_CODEC_H264)
 		pic_order_count = true;
-
-/* added for MMS plus header issue */
-	if ((encoder->codec.codec == VCD_CODEC_H263) &&
-		(encoder->frame_size.width == QCIF_WIDTH) &&
-		(encoder->frame_size.height == QCIF_HEIGHT))
-		h263_cpfc_enable = false;
-/* MMRND_AVRC. End */
 
 	ltr_enable = DDL_IS_LTR_ENABLED(encoder);
 	DDL_MSG_HIGH("ltr_enable = %u", ltr_enable);

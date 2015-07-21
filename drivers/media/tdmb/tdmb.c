@@ -114,12 +114,9 @@ create_databuffer_fail:
 
 	return false;
 }
-
-static DEFINE_MUTEX(tdmb_lock);
 static bool tdmb_power_off(void)
 {
 	DPRINTK("%s : tdmb_pwr_on(%d)\n", __func__, tdmb_pwr_on);
-	mutex_lock(&tdmb_lock);
 
 	if (tdmb_pwr_on) {
 		tdmbdrv_func->power_off();
@@ -131,8 +128,6 @@ static bool tdmb_power_off(void)
 		tdmb_pwr_on = false;
 	}
 	tdmb_last_ch = 0;
-	mutex_unlock(&tdmb_lock);
-
 	return true;
 }
 
@@ -153,6 +148,7 @@ tdmb_read(struct file *file, char __user *buf, size_t nbytes, loff_t *ppos)
 static int tdmb_release(struct inode *inode, struct file *filp)
 {
 	DPRINTK("tdmb_release\n");
+
 	tdmb_power_off();
 
 #if TDMB_PRE_MALLOC
@@ -166,6 +162,7 @@ static int tdmb_release(struct inode *inode, struct file *filp)
 		cmd_size = 0;
 	}
 #endif
+
 	return 0;
 }
 
@@ -210,6 +207,9 @@ static int tdmb_mmap(struct file *filp, struct vm_area_struct *vma)
 #endif
 
 	pfn = virt_to_phys(ts_ring) >> PAGE_SHIFT;
+
+//	DPRINTK("vm_start:%lx,ts_ring:%p,size:%x,prot:%lx,pfn:%lx\n",
+//			vma->vm_start, ts_ring, size, vma->vm_page_prot, pfn);
 
 	if (remap_pfn_range(vma, vma->vm_start, pfn, size, vma->vm_page_prot))
 		return -EAGAIN;
@@ -506,12 +506,6 @@ static long tdmb_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		DPRINTK("rssi %d, ber %d, ANT %d\n",
 			dm_buff.rssi, dm_buff.ber, dm_buff.antenna);
 		break;
-	case IOCTL_TDMB_SET_AUTOSTART:
-		DPRINTK("IOCTL_TDMB_SET_AUTOSTART : %ld\n",arg);
-#if defined(CONFIG_TDMB_ANT_DET)
-		tdmb_ant_det_irq_set(arg);
-#endif
-		break;
 	}
 
 	return ret;
@@ -558,7 +552,6 @@ enum {
 static struct input_dev *tdmb_ant_input;
 static int tdmb_check_ant;
 static int ant_prev_status;
-static int ant_irq_ret=-1;
 
 #define TDMB_ANT_WAIT_INIT_TIME	500000 /* us */
 #define TDMB_ANT_CHECK_DURATION 50000 /* us */
@@ -665,6 +658,7 @@ static bool tdmb_ant_det_reg_input(struct platform_device *pdev)
 		goto free_input_dev;
 	}
 	tdmb_ant_input = input;
+	ant_prev_status = gpio_get_value_cansleep(gpio_cfg.gpio_ant_det);
 
 	return true;
 
@@ -720,38 +714,29 @@ static irqreturn_t tdmb_ant_det_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-bool tdmb_ant_det_irq_set(bool set)
+static bool tdmb_ant_det_irq_set(bool set)
 {
 	bool ret = true;
-	DPRINTK("%s : set(%d) ant_irq(%d)\n", __func__, set, ant_irq_ret);
+	int irq_ret;
+	DPRINTK("%s\n", __func__);
 
 	if (set) {
-		if (ant_irq_ret < 0) {
-			ant_prev_status =
-				gpio_get_value_cansleep(gpio_cfg.gpio_ant_det);
-
-			irq_set_irq_type(gpio_cfg.irq_ant_det
+		irq_set_irq_type(gpio_cfg.irq_ant_det
 					, IRQ_TYPE_EDGE_BOTH);
 
-			ant_irq_ret = request_irq(gpio_cfg.irq_ant_det
+		irq_ret = request_irq(gpio_cfg.irq_ant_det
 						, tdmb_ant_det_irq_handler
 						, IRQF_DISABLED
 						, "tdmb_ant_det"
 						, NULL);
-			if (ant_irq_ret < 0) {
-				DPRINTK("%s %d\r\n", __func__, ant_irq_ret);
-				ret = false;
-			} else {
-				enable_irq_wake(gpio_cfg.irq_ant_det);
-			}
-		}
-	} else {
-		if(ant_irq_ret >= 0) {
-			disable_irq_wake(gpio_cfg.irq_ant_det);
-			free_irq(gpio_cfg.irq_ant_det, NULL);
-			ant_irq_ret=-1;
+		if (irq_ret < 0) {
+			DPRINTK("%s %d\r\n", __func__, irq_ret);
 			ret = false;
 		}
+		enable_irq_wake(gpio_cfg.irq_ant_det);
+	} else {
+		disable_irq_wake(gpio_cfg.irq_ant_det);
+		free_irq(gpio_cfg.irq_ant_det, NULL);
 	}
 
 	return ret;
@@ -773,6 +758,7 @@ static int tdmb_probe(struct platform_device *pdev)
 	tdmb_class = class_create(THIS_MODULE, TDMB_DEV_NAME);
 	if (IS_ERR(tdmb_class)) {
 		unregister_chrdev(TDMB_DEV_MAJOR, TDMB_DEV_NAME);
+		class_destroy(tdmb_class);
 		DPRINTK("class_create failed!\n");
 
 		return -EFAULT;
@@ -815,8 +801,13 @@ static int tdmb_probe(struct platform_device *pdev)
 		goto err_reg_input;
 	if (!tdmb_ant_det_create_wq())
 		goto free_reg_input;
+	if (!tdmb_ant_det_irq_set(true))
+		goto free_ant_det_wq;
+
 	return 0;
 
+free_ant_det_wq:
+	tdmb_ant_det_destroy_wq();
 free_reg_input:
 	tdmb_ant_det_unreg_input();
 err_reg_input:
@@ -864,8 +855,8 @@ static int __init tdmb_init(void)
 {
 	int ret;
 
-#ifdef CONFIG_SAMSUNG_LPM_MODE
-	if (poweroff_charging) {
+#ifdef CONFIG_BATTERY_SEC
+	if (is_lpcharging_state()) {
 		pr_info("%s : LPM Charging Mode! return 0\n", __func__);
 		return 0;
 	}

@@ -261,12 +261,6 @@ config HID_KENSINGTON
 	---help---
 	Support for Kensington Slimblade Trackball.
 
-config HID_KK_UPGRADE
-	bool "KK Upgrade"
-	depends on USB_HID
-	---help---
-	Feature for KK Upgrade models.
-
 config HID_LCPOWER
 	tristate "LC-Power"
 	depends on USB_HID
@@ -590,13 +584,6 @@ config SMARTJOYPLUS_FF
 	Say Y here if you have a SmartJoy PLUS PS2/USB adapter and want to
 	enable force feedback support for it.
 
-config HID_SYNAPTICS_BT
-	tristate "HID Synaptics"
-	depends on HID
-	default n
-	---help---
-	For a Bluetooth HID touchpad
-
 config HID_TIVO
 	tristate "TiVo Slide Bluetooth remote control support"
 	depends on (USB_HID || BT_HIDP)
@@ -657,12 +644,6 @@ config HID_WIIMOTE_EXT
 	Support for extension controllers of the Nintendo Wii Remote. Say yes
 	here if you want to use the Nintendo Motion+, Nunchuck or Classic
 	extension controllers with your Wii Remote.
-
-config HID_ZAGG
-	tristate "ZAGG InfraRed remote control or keyboards"
-	depends on (USB_HID || BT_HIDP)
-	---help---
-	Support for ZAGG InfraRed remote control or keyboards.
 
 config HID_ZEROPLUS
 	tristate "Zeroplus based game controller support"

@@ -38,7 +38,6 @@
 #endif
 #include <mach/msm_subsystem_map.h>
 #include <mach/iommu_domains.h>
-extern void xlog(const char *name, u32 data0, u32 data1, u32 data2, u32 data3, u32 data4);
 
 #define DRIVER_NAME "msm_rotator"
 
@@ -276,10 +275,6 @@ u32 rotator_allocate_2pass_buf(struct rot_buf_type *rot_buf, int s_ndx)
 			__func__, __LINE__);
 		rot_buf->ihdl = ion_alloc(mrd->client, buffer_size, SZ_4K,
 			mrd->rot_session[s_ndx]->mem_hid,
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-			mrd->rot_session[s_ndx]->mem_hid & ION_FORCE_CONTIGUOUS?
-			mrd->rot_session[s_ndx]->mem_hid & ION_FORCE_CONTIGUOUS:
-#endif /* !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960) */
 			mrd->rot_session[s_ndx]->mem_hid & ION_SECURE);
 		if (!IS_ERR_OR_NULL(rot_buf->ihdl)) {
 			if (rot_iommu_split_domain) {
@@ -519,11 +514,8 @@ static void disable_rot_clks(void)
 
 static void msm_rotator_rot_clk_work_f(struct work_struct *work)
 {
-	if(msm_rotator_dev->processing == 1)
-		pr_err("%s(): msm_rotator is now on processing\n", __func__);
-
 	if (mutex_trylock(&msm_rotator_dev->rotator_lock)) {
-		if ((msm_rotator_dev->rot_clk_state == CLK_EN) && (msm_rotator_dev->processing == 0)) {
+		if (msm_rotator_dev->rot_clk_state == CLK_EN) {
 			disable_rot_clks();
 			msm_rotator_dev->rot_clk_state = CLK_DIS;
 		} else if (msm_rotator_dev->rot_clk_state == CLK_SUSPEND)
@@ -1163,7 +1155,7 @@ static int msm_rotator_ycxcx_h2v2(struct msm_rotator_img_info *info,
 			iowrite32(GET_PACK_PATTERN(0, 0, CLR_CR, CLR_CB, 8),
 				  MSM_ROTATOR_OUT_PACK_PATTERN1);
 		}
-		xlog(__func__, fast_yuv_en, 0, 0, 0, 0);
+
 		iowrite32((3  << 18) |		/* chroma sampling 3=4:2:0 */
 			  (ROTATIONS_TO_BITMASK(info->rotations) << 9) |
 			  1 << 8 |			/* ROT_EN */
@@ -2029,10 +2021,9 @@ static int msm_rotator_do_rotate_sub(
 	dstp1_ihdl = commit_info->dstp1_ihdl;
 	ps0_need = commit_info->ps0_need;
 	s = commit_info->session_index;
-	xlog(__func__, 0, 0, 0, 0, 0);
+
 	msm_rotator_wait_for_fence(commit_info->acq_fen);
 	commit_info->acq_fen = NULL;
-	xlog(__func__, 1, 0, 0, 0, 0);
 
 	cancel_delayed_work_sync(&msm_rotator_dev->rot_clk_work);
 	if (msm_rotator_dev->rot_clk_state != CLK_EN) {
@@ -2067,11 +2058,6 @@ static int msm_rotator_do_rotate_sub(
 		  (img_info->src.width & 0x1fff),
 		  MSM_ROTATOR_SRC_IMAGE_SIZE);
 
-	xlog(__func__, format, img_info->src_rect.w, img_info->src_rect.h,
-		img_info->rotations, img_info->downscale_ratio);
-	xlog(__func__, format, img_info->src_rect.w, img_info->src_rect.h,
-		img_info->src_rect.x, img_info->src_rect.y);
-	xlog(__func__, img_info->dst_x, img_info->dst_y, 0, 0, 0);
 	switch (format) {
 	case MDP_RGB_565:
 	case MDP_BGR_565:
@@ -2179,9 +2165,7 @@ do_rotate_exit:
 		fput_light(srcp0_file, ps0_need);
 	else
 		put_img(srcp0_file, srcp0_ihdl, ROTATOR_SRC_DOMAIN, 0);
-	xlog(__func__, 0, 0, 0, 0, 0);
 	msm_rotator_signal_timeline_done(s);
-	xlog(__func__, 1, 0, 0, 0, 0);
 	mutex_unlock(&msm_rotator_dev->rotator_lock);
 	dev_dbg(msm_rotator_dev->device, "%s() returning rc = %d\n",
 		__func__, rc);
@@ -2607,14 +2591,8 @@ static int msm_rotator_start(unsigned long arg,
 				rot_session->mem_hid |= BIT(ION_CP_MM_HEAP_ID);
 				rot_session->mem_hid |= ION_SECURE;
 			} else {
-#if !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960)
-				rot_session->mem_hid |= BIT(ION_CP_MM_HEAP_ID);
-				rot_session->mem_hid &= ~ION_SECURE;
-				rot_session->mem_hid |= ION_FORCE_CONTIGUOUS;
-#else
 				rot_session->mem_hid &= ~BIT(ION_CP_MM_HEAP_ID);
 				rot_session->mem_hid &= ~ION_SECURE;
-#endif /* !defined(CONFIG_MSM_IOMMU) && defined(CONFIG_SEC_PRODUCT_8960) */
 				rot_session->mem_hid |= BIT(ION_IOMMU_HEAP_ID);
 			}
 		}
@@ -2784,7 +2762,7 @@ static long msm_rotator_ioctl(struct file *file, unsigned cmd,
 						 unsigned long arg)
 {
 	struct msm_rotator_fd_info *fd_info;
-	int ret = 0;
+
 	if (_IOC_TYPE(cmd) != MSM_ROTATOR_IOCTL_MAGIC)
 		return -ENOTTY;
 
@@ -2794,17 +2772,12 @@ static long msm_rotator_ioctl(struct file *file, unsigned cmd,
 	case MSM_ROTATOR_IOCTL_START:
 		return msm_rotator_start(arg, fd_info);
 	case MSM_ROTATOR_IOCTL_ROTATE:
-		xlog(__func__, 0, 0, 0, 0, 0);
-		ret = msm_rotator_do_rotate(arg);
-		xlog(__func__, 1, 0, 0, 0, 0);
-		return ret;
+		return msm_rotator_do_rotate(arg);
 	case MSM_ROTATOR_IOCTL_FINISH:
 		return msm_rotator_finish(arg);
 	case MSM_ROTATOR_IOCTL_BUFFER_SYNC:
-		xlog(__func__, 0, 0, 1, 0, 0);
-		ret =  msm_rotator_buf_sync(arg);
-		xlog(__func__, 0, 0, 0, 0, 0);
-		return ret;
+		return msm_rotator_buf_sync(arg);
+
 	default:
 		dev_dbg(msm_rotator_dev->device,
 			"unexpected IOCTL %d\n", cmd);

@@ -27,12 +27,14 @@
 #include "board-8064.h"
 #include <mach/apq8064-gpio.h>
 
+#if 0
 /* The SPI configurations apply to GSBI 5*/
 static struct gpiomux_setting gpio_spi_config = {
 	.func = GPIOMUX_FUNC_2,
 	.drv = GPIOMUX_DRV_12MA,
 	.pull = GPIOMUX_PULL_DOWN,
 };
+#endif
 
 #if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
 static struct gpiomux_setting gpio_eth_config = {
@@ -334,13 +336,6 @@ struct msm_gpiomux_config vcap_configs[] = {
 };
 #endif
 
-static struct gpiomux_setting gpio_nc_config = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-};
-
-/*
 static struct gpiomux_setting gpio_i2c_config = {
 	.func = GPIOMUX_FUNC_1,
 	.drv = GPIOMUX_DRV_8MA,
@@ -352,7 +347,6 @@ static struct gpiomux_setting gpio_i2c_config_sus = {
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_KEEPER,
 };
-*/
 
 static struct gpiomux_setting mbhc_hs_detect = {
 	.func = GPIOMUX_FUNC_1,
@@ -521,6 +515,13 @@ static struct msm_gpiomux_config cyts_gpio_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_ACTIVE]    = &cyts_int_act_cfg,
 			[GPIOMUX_SUSPENDED] = &cyts_int_sus_cfg,
+		},
+	},
+	{	/* TS SLEEP */
+		.gpio = 33,
+		.settings = {
+			[GPIOMUX_ACTIVE]    = &cyts_sleep_act_cfg,
+			[GPIOMUX_SUSPENDED] = &cyts_sleep_sus_cfg,
 		},
 	},
 };
@@ -741,6 +742,20 @@ static struct msm_gpiomux_config apq8064_gsbi_configs[] __initdata = {
 		},
 	},
 	{
+		.gpio      = 21,		/* GSBI1 QUP I2C_CLK */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
+			[GPIOMUX_ACTIVE] = &gpio_i2c_config,
+		},
+	},
+	{
+		.gpio      = 20,		/* GSBI1 QUP I2C_DATA */
+		.settings = {
+			[GPIOMUX_SUSPENDED] = &gpio_i2c_config_sus,
+			[GPIOMUX_ACTIVE] = &gpio_i2c_config,
+		},
+	},
+	{
 		.gpio      = 24,	/* GSBI2 I2C QUP SDA */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gsbi2_suspend_cfg,
@@ -757,29 +772,29 @@ static struct msm_gpiomux_config apq8064_gsbi_configs[] __initdata = {
 	{
 		.gpio      = 51,		/* GSBI5 QUP SPI_DATA_MOSI */
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_spi_config,
-			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gsbi5_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi5_active_cfg,
 		},
 	},
 	{
 		.gpio      = 52,		/* GSBI5 QUP SPI_DATA_MISO */
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_spi_config,
-			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gsbi5_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi5_active_cfg,
 		},
 	},
 	{
 		.gpio      = 53,		/* Funny CS0 */
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_spi_config,
-			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gsbi5_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi5_active_cfg,
 		},
 	},
 	{
 		.gpio      = 54,		/* GSBI5 QUP SPI_CLK */
 		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_spi_config,
-			[GPIOMUX_ACTIVE] = &gpio_spi_config,
+			[GPIOMUX_SUSPENDED] = &gsbi5_suspended_cfg,
+			[GPIOMUX_ACTIVE] = &gsbi5_active_cfg,
 		},
 	},
 #if !defined(CONFIG_USB_EHCI_MSM_HSIC)
@@ -800,50 +815,6 @@ static struct msm_gpiomux_config apq8064_gsbi_configs[] __initdata = {
 		.gpio      = 83,	/* GSBI7 UART2 RX */
 		.settings = {
 			[GPIOMUX_SUSPENDED] = &gsbi7_func1_cfg,
-		},
-	},
-};
-
-static struct msm_gpiomux_config apq8064_nc_configs[] __initdata = {
-	{
-		.gpio      = 20,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
-		},
-	},
-	{
-		.gpio      = 21,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
-		},
-	},
-	{
-		.gpio      = 29,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
-		},
-	},
-};
-
-static struct msm_gpiomux_config apq8064_nc_configs_rev05[] __initdata = {
-#if !defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
-	{
-		.gpio      = 20,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
-		},
-	},
-#endif
-	{
-		.gpio      = 21,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
-		},
-	},
-	{
-		.gpio      = 29,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &gpio_nc_config,
 		},
 	},
 };
@@ -913,38 +884,38 @@ static struct msm_gpiomux_config apq8064_audio_codec_configs[] __initdata = {
 
 static struct gpiomux_setting ap2mdm_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_4MA,
+	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting mdm2ap_status_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
+	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting mdm2ap_errfatal_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
+	.drv = GPIOMUX_DRV_16MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting mdm2ap_pblrdy = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
+	.drv = GPIOMUX_DRV_16MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
 
 static struct gpiomux_setting ap2mdm_soft_reset_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_4MA,
+	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
 static struct gpiomux_setting ap2mdm_wakeup = {
 	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_4MA,
+	.drv = GPIOMUX_DRV_8MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
 
@@ -1089,105 +1060,6 @@ static struct msm_gpiomux_config mdm_configs[] __initdata = {
 	},
 };
 #endif
-
-static struct msm_gpiomux_config amdm_configs[] __initdata = {
-	/* AP2MDM_STATUS */
-	{
-		.gpio = 48,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
-		}
-	},
-	/* MDM2AP_STATUS */
-	{
-		.gpio = 49,
-		.settings = {
-			[GPIOMUX_ACTIVE] = &mdm2ap_status_cfg,
-			[GPIOMUX_SUSPENDED] = &mdm2ap_status_cfg,
-		}
-	},
-	/* MDM2AP_ERRFATAL */
-	{
-		.gpio = 19,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_errfatal_cfg,
-		}
-	},
-	/* AP2MDM_ERRFATAL */
-	{
-		.gpio = 18,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
-		}
-	},
-	/* AP2MDM_SOFT_RESET, aka AP2MDM_PON_RESET_N */
-	{
-		.gpio = 27,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_soft_reset_cfg,
-		}
-	},
-	/* AP2MDM_WAKEUP */
-	{
-		.gpio = 35,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_wakeup,
-		}
-	},
-	/* MDM2AP_PBL_READY*/
-	{
-		.gpio = 31,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_pblrdy,
-		}
-	},
-};
-
-static struct msm_gpiomux_config bmdm_configs[] __initdata = {
-	/* AP2MDM_STATUS */
-	{
-		.gpio = 56,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
-		}
-	},
-	/* MDM2AP_STATUS */
-	{
-		.gpio = 32,
-		.settings = {
-			[GPIOMUX_ACTIVE] = &mdm2ap_status_cfg,
-			[GPIOMUX_SUSPENDED] = &mdm2ap_status_cfg,
-		}
-	},
-	/* MDM2AP_ERRFATAL */
-	{
-		.gpio = 81,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_errfatal_cfg,
-		}
-	},
-	/* AP2MDM_ERRFATAL */
-	{
-		.gpio = 18,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_cfg,
-		}
-	},
-	/* AP2MDM_SOFT_RESET, aka AP2MDM_PON_RESET_N */
-	{
-		.gpio = 3,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_soft_reset_cfg,
-		}
-	},
-	/* AP2MDM_WAKEUP */
-	{
-		.gpio = 29,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ap2mdm_wakeup,
-		}
-	},
-};
 
 static struct msm_gpiomux_config mdm_i2s_configs[] __initdata = {
 	/* AP2MDM_STATUS */
@@ -1507,7 +1379,7 @@ static struct msm_gpiomux_config sx150x_int_configs[] __initdata = {
 static struct gpiomux_setting sd_det_line = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_UP,
 	.dir = GPIOMUX_IN,
 };
 
@@ -1520,25 +1392,6 @@ static struct msm_gpiomux_config msm8064_sd_det_config[] = {
 		},
 	},
 };
-
-#ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
-
-static struct gpiomux_setting ls_en_suspended_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.pull = GPIOMUX_PULL_NONE,
-	.dir = GPIOMUX_OUT_LOW,
-};
-
-static struct msm_gpiomux_config msm8064_ls_en_config[] = {
-	{
-		.gpio = 64,	/* Level Shifter Enable */
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &ls_en_suspended_cfg,
-		},
-	},
-};
-
-#endif
 
 #if defined(CONFIG_LEDS_AN30259A)
 static struct gpiomux_setting leds_active_cfg = {
@@ -1671,110 +1524,6 @@ static struct msm_gpiomux_config apq8064_auxpcm_configs[] __initdata = {
 	},
 };
 
-static struct msm_gpiomux_config sglte2_qsc_configs[] __initdata = {
-	/* MDM2AP_STATUS */
-	{
-		.gpio = 51,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_status_cfg,
-		}
-	},
-	/* MDM2AP_ERRFATAL */
-	{
-		.gpio = 52,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_errfatal_cfg,
-		}
-	},
-};
-
-static struct gpiomux_setting gsbi4_uartdm_active = {
-	.func = GPIOMUX_FUNC_1,
-	.drv = GPIOMUX_DRV_8MA,
-	.pull = GPIOMUX_PULL_NONE,
-};
-
-static struct gpiomux_setting gsbi4_uartdm_suspended = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-};
-
-static struct gpiomux_setting gsbi6_uartdm_active = {
-	.func = GPIOMUX_FUNC_2,
-	.drv = GPIOMUX_DRV_8MA,
-	.pull = GPIOMUX_PULL_NONE,
-};
-
-static struct gpiomux_setting gsbi6_uartdm_suspended = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-};
-
-static struct msm_gpiomux_config apq8064_uartdm_gsbi4_configs[] __initdata = {
-	{
-		.gpio      = 11,        /* GSBI4 UARTDM RX */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gsbi4_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi4_uartdm_suspended,
-		},
-	},
-	{
-		.gpio      = 10,       /* GSBI4 UARTDM TX */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gsbi4_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi4_uartdm_suspended,
-		},
-	},
-	{
-		.gpio      = 13,        /* GSBI4 UARTDM RFR */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gsbi4_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi4_uartdm_suspended,
-		},
-	},
-	{
-		.gpio      = 12,        /* GSBI4 UARTDM CTS */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gsbi4_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi4_uartdm_suspended,
-		},
-	},
-};
-
-static struct msm_gpiomux_config mpq8064_uartdm_configs[] __initdata = {
-	{ /* UARTDM_TX */
-		.gpio      = 14,
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &gsbi6_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi6_uartdm_suspended,
-		},
-	},
-	{ /* UARTDM_RX */
-		.gpio      = 15,
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &gsbi6_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi6_uartdm_suspended,
-		},
-	},
-	{ /* UARTDM_CTS */
-		.gpio      = 16,
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &gsbi6_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi6_uartdm_suspended,
-		},
-	},
-	{ /* UARTDM_RFR */
-		.gpio      = 17,
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &gsbi6_uartdm_active,
-			[GPIOMUX_SUSPENDED] = &gsbi6_uartdm_suspended,
-		},
-	},
-};
-
-
 void __init apq8064_init_gpiomux(void)
 {
 	int rc;
@@ -1793,9 +1542,6 @@ void __init apq8064_init_gpiomux(void)
 	else
 		msm_gpiomux_install(sdc2_interface,
 				ARRAY_SIZE(sdc2_interface));
-				
-    msm_gpiomux_install(msm8064_ls_en_config,
-			ARRAY_SIZE(msm8064_ls_en_config));					
 #else
 	msm_gpiomux_install(wcnss_5wire_interface,
 			ARRAY_SIZE(wcnss_5wire_interface));
@@ -1819,17 +1565,6 @@ void __init apq8064_init_gpiomux(void)
 
 		msm_gpiomux_install(apq8064_gsbi_configs,
 				ARRAY_SIZE(apq8064_gsbi_configs));
-	}
-	
-	if( system_rev >= 13 ) // rev0.5 + 8
-	{
-		msm_gpiomux_install(apq8064_nc_configs_rev05,
-				ARRAY_SIZE(apq8064_nc_configs_rev05));
-	}
-	else
-	{
-		msm_gpiomux_install(apq8064_nc_configs,
-				ARRAY_SIZE(apq8064_nc_configs));
 	}
 
 	msm_gpiomux_install(sensorhub_configs,
@@ -1859,28 +1594,12 @@ void __init apq8064_init_gpiomux(void)
 			ARRAY_SIZE(mpq8064_mi2s_configs));
 
 	if (machine_is_apq8064_mtp()|| machine_is_JF()) {
-		if (socinfo_get_platform_subtype() == PLATFORM_SUBTYPE_DSDA2) {
-			msm_gpiomux_install(amdm_configs,
-					ARRAY_SIZE(amdm_configs));
-			msm_gpiomux_install(bmdm_configs,
-					ARRAY_SIZE(bmdm_configs));
-		} else if (socinfo_get_platform_subtype() ==
-				PLATFORM_SUBTYPE_SGLTE2) {
-			msm_gpiomux_install(mdm_configs,
-					ARRAY_SIZE(mdm_configs));
-			msm_gpiomux_install(sglte2_qsc_configs,
-					ARRAY_SIZE(sglte2_qsc_configs));
-
-			/* GSBI4 UART GPIOs for Primary IPC */
-			msm_gpiomux_install(apq8064_uartdm_gsbi4_configs,
-					ARRAY_SIZE(apq8064_uartdm_gsbi4_configs));
-		} else if (SOCINFO_VERSION_MINOR(platform_version) == 1) {
+		if (SOCINFO_VERSION_MINOR(platform_version) == 1)
 			msm_gpiomux_install(mdm_i2s_configs,
 					ARRAY_SIZE(mdm_i2s_configs));
-		} else {
+		else
 			msm_gpiomux_install(mdm_configs,
 					ARRAY_SIZE(mdm_configs));
-		}
 	}
 
 	if (machine_is_apq8064_mtp()|| machine_is_JF()) {
@@ -1936,7 +1655,4 @@ void __init apq8064_init_gpiomux(void)
 #endif
 	msm_gpiomux_install(apq8064_sec_jack_configs,
 			ARRAY_SIZE(apq8064_sec_jack_configs));
-	if (machine_is_mpq8064_hrd() || machine_is_mpq8064_dtv())
-		msm_gpiomux_install(mpq8064_uartdm_configs,
-				ARRAY_SIZE(mpq8064_uartdm_configs));
 }

@@ -1169,7 +1169,7 @@ static int _qcrypto_process_ahash(struct crypto_priv *cp,
 static int _qcrypto_process_aead(struct crypto_priv *cp,
 				struct crypto_async_request *async_req)
 {
-	struct qce_req qreq = {0};
+	struct qce_req qreq;
 	int ret = 0;
 	struct qcrypto_cipher_req_ctx *rctx;
 	struct qcrypto_cipher_ctx *cipher_ctx;
@@ -1220,12 +1220,12 @@ static int _qcrypto_process_aead(struct crypto_priv *cp,
 			rctx->orig_src = req->src;
 			rctx->orig_dst = req->dst;
 
-			if ((MAX_ALIGN_SIZE*2 > UINT_MAX - qreq.assoclen) ||
-				((MAX_ALIGN_SIZE*2 + qreq.assoclen) >
-					UINT_MAX - qreq.authsize) ||
-				((MAX_ALIGN_SIZE*2 + qreq.assoclen +
+			if ((MAX_ALIGN_SIZE * 2 > ULONG_MAX - req->assoclen) ||
+				((MAX_ALIGN_SIZE * 2 + req->assoclen) >
+						ULONG_MAX - qreq.authsize) ||
+				((MAX_ALIGN_SIZE * 2 + req->assoclen +
 						qreq.authsize) >
-						UINT_MAX - req->cryptlen)) {
+						ULONG_MAX - req->cryptlen)) {
 				pr_err("Integer overflow on aead req length.\n");
 				return -EINVAL;
 			}

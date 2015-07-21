@@ -2,7 +2,6 @@
  * MobiCore Driver Kernel Module.
  *
  * <-- Copyright Giesecke & Devrient GmbH 2009-2012 -->
- * <-- Copyright Trustonic Limited 2013 -->
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -98,10 +97,7 @@ EXPORT_SYMBOL(mobicore_allocate_wsm);
  */
 struct mc_instance *mobicore_open(void)
 {
-	struct mc_instance *instance = mc_alloc_instance();
-	if (instance)
-		instance->admin = true;
-	return instance;
+	return mc_alloc_instance();
 }
 EXPORT_SYMBOL(mobicore_open);
 

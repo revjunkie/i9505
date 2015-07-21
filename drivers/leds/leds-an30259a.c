@@ -809,8 +809,7 @@ static int __devinit an30259a_initialize(struct i2c_client *client,
 			&common_led_attr_group);
 
 	if (ret < 0) {
-		dev_err(dev, "can not register sysfs attribute for led channel : %d\n", channel);
-		led_classdev_unregister(&led->cdev);
+		dev_err(dev, "can not register sysfs attribute\n");
 		return ret;
 	}
 
@@ -819,20 +818,12 @@ static int __devinit an30259a_initialize(struct i2c_client *client,
 	return 0;
 }
 
-//if one led will fail to register than all led registration will fail
-static void an30259a_deinitialize(struct an30259a_led *led, int channel)
-{
-	sysfs_remove_group(&led->cdev.dev->kobj,&common_led_attr_group);
-	led_classdev_unregister(&led->cdev);
-	cancel_work_sync(&led->brightness_work);
-}
 
 static int __devinit an30259a_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	struct an30259a_data *data;
 	int ret, i;
-
 	dev_dbg(&client->adapter->dev, "%s\n", __func__);
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "need I2C_FUNC_I2C.\n");
@@ -857,11 +848,7 @@ static int __devinit an30259a_probe(struct i2c_client *client,
 		ret = an30259a_initialize(client, &data->leds[i], i);
 
 		if (ret < 0) {
-			dev_err(&client->adapter->dev, "failure on initialization at led channel:%d\n", i);
-			while(i>0) { 
-					i--;
-					an30259a_deinitialize(&data->leds[i], i);
-			}
+			dev_err(&client->adapter->dev, "failure on initialization\n");
 			goto exit;
 		}
 		INIT_WORK(&(data->leds[i].brightness_work),

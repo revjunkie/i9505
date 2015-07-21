@@ -11,7 +11,6 @@
  * fd = open(/dev/mobicore-user)
  *
  * <-- Copyright Giesecke & Devrient GmbH 2009-2012 -->
- * <-- Copyright Trustonic Limited 2013 -->
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -28,12 +27,6 @@
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/completion.h>
-#include <linux/fdtable.h>
-#include <linux/cdev.h>
-#include <net/net_namespace.h>
-#include <net/sock.h>
-#include <net/tcp_states.h>
-#include <net/af_unix.h>
 
 #include "main.h"
 #include "fastcall.h"
@@ -47,49 +40,15 @@
 
 /* Define a MobiCore device structure for use with dev_debug() etc */
 struct device_driver mcd_debug_name = {
-	.name = "MobiCore"
+	.name = "mcdrvkmod"
 };
 
 struct device mcd_debug_subname = {
+	.init_name = "", /* Set to 'mcd' at mc_init() time */
 	.driver = &mcd_debug_name
 };
 
 struct device *mcd = &mcd_debug_subname;
-
-/* We need 2 devices for admin and user interface*/
-#define MC_DEV_MAX 2
-
-/* Need to discover a chrdev region for the driver */
-static dev_t mc_dev_admin, mc_dev_user;
-struct cdev mc_admin_cdev, mc_user_cdev;
-/* Device class for the driver assigned major */
-static struct class *mc_device_class;
-
-#ifndef FMODE_PATH
- #define FMODE_PATH 0x0
-#endif
-
-static struct sock *__get_socket(struct file *filp)
-{
-	struct sock *u_sock = NULL;
-	struct inode *inode = filp->f_path.dentry->d_inode;
-
-	/*
-	 *	Socket ?
-	 */
-	if (S_ISSOCK(inode->i_mode) && !(filp->f_mode & FMODE_PATH)) {
-		struct socket *sock = SOCKET_I(inode);
-		struct sock *s = sock->sk;
-
-		/*
-		 *	PF_UNIX ?
-		 */
-		if (s && sock->ops && sock->ops->family == PF_UNIX)
-			u_sock = s;
-	}
-	return u_sock;
-}
-
 
 /* MobiCore interrupt context data */
 struct mc_context ctx;
@@ -124,15 +83,22 @@ static inline void free_continguous_pages(void *addr, unsigned int order)
 /* Frees the memory associated with a buffer */
 static int free_buffer(struct mc_buffer *buffer, bool unlock)
 {
+	struct mm_struct *mm = current->mm;
 	if (buffer->handle == 0)
 		return -EINVAL;
 
-	if (buffer->addr == 0)
+	if (buffer->addr == 0 || buffer->uaddr == 0)
 		return -EINVAL;
 
-	MCDRV_DBG_VERBOSE(mcd,
-			  "handle=%u phys_addr=0x%p, virt_addr=0x%p len=%u\n",
+	MCDRV_DBG(mcd, "handle=%u phys_addr=0x%p, virt_addr=0x%p len=%u\n",
 		  buffer->handle, buffer->phys, buffer->addr, buffer->len);
+
+	if (unlock == false)
+		if (do_munmap(mm, (long unsigned int)buffer->uaddr,
+			      buffer->len) < 0) {
+			MCDRV_DBG_ERROR(mcd, "Memory can't be unmapped\n");
+			return -EINVAL;
+	}
 
 	if (!atomic_dec_and_test(&buffer->usage)) {
 		MCDRV_DBG_VERBOSE(mcd, "Could not free %u", buffer->handle);
@@ -177,60 +143,8 @@ found:
 	return ret;
 }
 
-bool mc_check_owner_fd(struct mc_instance *instance, int32_t fd)
-{
-#ifndef __ARM_VE_A9X4_STD__
-	struct file *fp;
-	struct sock *s;
-	struct files_struct *files;
-	struct task_struct *peer = NULL;
-	bool ret = false;
-
-	MCDRV_DBG(mcd, "Finding wsm for fd = %d\n", fd);
-	if (!instance)
-		return false;
-
-	if (is_daemon(instance))
-		return true;
-
-	fp = fcheck_files(current->files, fd);
-	s = __get_socket(fp);
-	if (s) {
-		peer = get_pid_task(s->sk_peer_pid, PIDTYPE_PID);
-		MCDRV_DBG(mcd, "Found pid for fd %d\n", peer->pid);
-	}
-	if (peer) {
-		task_lock(peer);
-		files = peer->files;
-		if (!files)
-			goto out;
-		for (fd = 0; fd < files_fdtable(files)->max_fds; fd++) {
-			fp = fcheck_files(files, fd);
-			if (!fp)
-				continue;
-			if (fp->private_data == instance) {
-				MCDRV_DBG(mcd, "Found owner!");
-				ret = true;
-				goto out;
-			}
-
-		}
-	} else {
-		MCDRV_DBG(mcd, "Owner not found!");
-		return false;
-	}
-out:
-	if (peer)
-		task_unlock(peer);
-	if (!ret)
-		MCDRV_DBG(mcd, "Owner not found!");
-	return ret;
-#else
-	return true;
-#endif
-}
 static uint32_t mc_find_cont_wsm(struct mc_instance *instance, uint32_t handle,
-	int32_t fd, uint32_t *phys, uint32_t *len)
+	uint32_t *phys, uint32_t *len)
 {
 	int ret = 0;
 	struct mc_buffer *buffer;
@@ -250,13 +164,9 @@ static uint32_t mc_find_cont_wsm(struct mc_instance *instance, uint32_t handle,
 	/* search for the given handle in the buffers list */
 	list_for_each_entry(buffer, &ctx.cont_bufs, list) {
 		if (buffer->handle == handle) {
-			if (mc_check_owner_fd(buffer->instance, fd)) {
-				*phys = (uint32_t)buffer->phys;
-				*len = buffer->len;
-				goto found;
-			} else {
-				break;
-			}
+			*phys = (uint32_t)buffer->phys;
+			*len = buffer->len;
+			goto found;
 		}
 	}
 
@@ -284,52 +194,9 @@ static int __free_buffer(struct mc_instance *instance, uint32_t handle,
 {
 	int ret = 0;
 	struct mc_buffer *buffer;
-	void *uaddr = NULL;
-	size_t len = 0;
-#ifndef MC_VM_UNMAP
-	struct mm_struct *mm = current->mm;
-#endif
 
 	if (WARN(!instance, "No instance data available"))
 		return -EFAULT;
-
-	mutex_lock(&ctx.bufs_lock);
-	/* search for the given handle in the buffers list */
-	list_for_each_entry(buffer, &ctx.cont_bufs, list) {
-		if (buffer->handle == handle) {
-			uaddr = buffer->uaddr;
-			len = buffer->len;
-			goto found_buffer;
-		}
-	}
-	ret = -EINVAL;
-	goto err;
-found_buffer:
-	if (!is_daemon(instance) && buffer->instance != instance) {
-		ret = -EPERM;
-		goto err;
-	}
-	mutex_unlock(&ctx.bufs_lock);
-	/* Only unmap if the request is comming from the user space and
-	 * it hasn't already been unmapped */
-	if (unlock == false && uaddr != NULL) {
-#ifndef MC_VM_UNMAP
-		/* do_munmap must be done with mm->mmap_sem taken */
-		down_write(&mm->mmap_sem);
-		ret = do_munmap(mm, (long unsigned int)uaddr, len);
-		up_write(&mm->mmap_sem);
-
-#else
-		ret = vm_munmap((long unsigned int)uaddr, len);
-#endif
-		if (ret < 0) {
-			/* Something is not right if we end up here, better not
-			 * clean the buffer so we just leak memory instead of
-			 * creating security issues */
-			MCDRV_DBG_ERROR(mcd, "Memory can't be unmapped\n");
-			return -EINVAL;
-		}
-	}
 
 	mutex_lock(&ctx.bufs_lock);
 	/* search for the given handle in the buffers list */
@@ -341,10 +208,7 @@ found_buffer:
 	goto err;
 
 del_buffer:
-	if (is_daemon(instance) || buffer->instance == instance)
-		ret = free_buffer(buffer, unlock);
-	else
-		ret = -EPERM;
+	ret = free_buffer(buffer, unlock);
 err:
 	mutex_unlock(&ctx.bufs_lock);
 	return ret;
@@ -421,15 +285,14 @@ int mc_get_buffer(struct mc_instance *instance,
 	cbuffer->order = order;
 	cbuffer->len = len;
 	cbuffer->instance = instance;
-	cbuffer->uaddr = 0;
 	/* Refcount +1 because the TLC is requesting it */
 	atomic_set(&cbuffer->usage, 1);
 
 	INIT_LIST_HEAD(&cbuffer->list);
 	list_add(&cbuffer->list, &ctx.cont_bufs);
 
-	MCDRV_DBG_VERBOSE(mcd,
-			  "allocated phys=0x%p - 0x%p, size=%ld, kvirt=0x%p, h=%d\n",
+	MCDRV_DBG(mcd,
+		  "allocated phys=0x%p - 0x%p, size=%ld, kvirt=0x%p, h=%d\n",
 		  phys, (void *)((unsigned int)phys+allocated_size),
 		  allocated_size, addr, cbuffer->handle);
 	*buffer = cbuffer;
@@ -522,7 +385,7 @@ int mc_register_wsm_l2(struct mc_instance *instance,
 	if (!mc_find_cont_wsm_addr(instance, (void *)buffer, &kbuff, len))
 		table = mc_alloc_l2_table(instance, NULL, (void *)kbuff, len);
 	else
-		table = mc_alloc_l2_table(instance, task, (void *)buffer, len);
+	table = mc_alloc_l2_table(instance, task, (void *)buffer, len);
 
 	if (IS_ERR(table)) {
 		MCDRV_DBG_ERROR(mcd, "new_used_l2_table() failed\n");
@@ -537,9 +400,8 @@ int mc_register_wsm_l2(struct mc_instance *instance,
 	else
 		*phys = 0;
 
-	MCDRV_DBG_VERBOSE(mcd, "handle: %d, phys=%p\n",
-			  *handle, (void *)*phys);
-
+	MCDRV_DBG_VERBOSE(mcd, "handle: %d, phys=%p\n", *handle,
+			  (void *)table->phys);
 	MCDRV_DBG_VERBOSE(mcd, "exit with %d/0x%08X\n", ret, ret);
 
 	return ret;
@@ -609,8 +471,7 @@ static int mc_unlock_handle(struct mc_instance *instance, uint32_t handle)
 	return ret;
 }
 
-static uint32_t mc_find_wsm_l2(struct mc_instance *instance,
-	uint32_t handle, int32_t fd)
+static uint32_t mc_find_wsm_l2(struct mc_instance *instance, uint32_t handle)
 {
 	uint32_t ret = 0;
 
@@ -622,7 +483,9 @@ static uint32_t mc_find_wsm_l2(struct mc_instance *instance,
 		return 0;
 	}
 
-	ret = mc_find_l2_table(handle, fd);
+	mutex_lock(&instance->lock);
+	ret = mc_find_l2_table(instance, handle);
+	mutex_unlock(&instance->lock);
 
 	return ret;
 }
@@ -651,8 +514,8 @@ static int mc_fd_mmap(struct file *file, struct vm_area_struct *vmarea)
 	struct mc_buffer *buffer = 0;
 	int ret = 0;
 
-	MCDRV_DBG_VERBOSE(mcd, "enter (vma start=0x%p, size=%ld, mci=%p)\n",
-			  (void *)vmarea->vm_start, len, ctx.mci_base.phys);
+	MCDRV_DBG(mcd, "enter (vma start=0x%p, size=%ld, mci=%p)\n",
+		  (void *)vmarea->vm_start, len, ctx.mci_base.phys);
 
 	if (WARN(!instance, "No instance data available"))
 		return -EFAULT;
@@ -666,18 +529,10 @@ static int mc_fd_mmap(struct file *file, struct vm_area_struct *vmarea)
 
 		/* search for the buffer list. */
 		list_for_each_entry(buffer, &ctx.cont_bufs, list) {
-			/* Only allow mapping if the client owns it!*/
-			if (buffer->phys == paddr &&
-			    buffer->instance == instance) {
-				/* We shouldn't do remap with larger size */
-				if (buffer->len > len)
+			if (buffer->phys == paddr)
+				goto found;
+			else
 					break;
-				/* We can't allow mapping the buffer twice */
-				if (!buffer->uaddr)
-					goto found;
-				else
-					break;
-			}
 		}
 		/* Nothing found return */
 		mutex_unlock(&ctx.bufs_lock);
@@ -685,7 +540,7 @@ static int mc_fd_mmap(struct file *file, struct vm_area_struct *vmarea)
 
 found:
 		buffer->uaddr = (void *)vmarea->vm_start;
-		vmarea->vm_flags |= VM_IO;
+		vmarea->vm_flags |= VM_RESERVED;
 		/*
 		 * Convert kernel address to user address. Kernel address begins
 		 * at PAGE_OFFSET, user address range is below PAGE_OFFSET.
@@ -696,10 +551,6 @@ found:
 		pfn = (unsigned int)paddr >> PAGE_SHIFT;
 		ret = (int)remap_pfn_range(vmarea, vmarea->vm_start, pfn,
 			buffer->len, vmarea->vm_page_prot);
-		/* If the remap failed then don't mark this buffer as marked
-		 * since the unmaping will also fail */
-		if (ret)
-			buffer->uaddr = NULL;
 		mutex_unlock(&ctx.bufs_lock);
 	} else {
 		if (!is_daemon(instance))
@@ -709,7 +560,7 @@ found:
 		if (!paddr)
 			return -EFAULT;
 
-		vmarea->vm_flags |= VM_IO;
+		vmarea->vm_flags |= VM_RESERVED;
 		/*
 		 * Convert kernel address to user address. Kernel address begins
 		 * at PAGE_OFFSET, user address range is below PAGE_OFFSET.
@@ -807,8 +658,8 @@ static long mc_fd_user_ioctl(struct file *file, unsigned int cmd,
 		map.reused = 0;
 		if (copy_to_user(uarg, &map, sizeof(map)))
 			ret = -EFAULT;
-		else
-			ret = 0;
+
+		ret = 0;
 		break;
 	}
 	default:
@@ -893,18 +744,13 @@ static long mc_fd_admin_ioctl(struct file *file, unsigned int cmd,
 		ret = mc_clean_wsm_l2(instance);
 		break;
 	case MC_IO_RESOLVE_WSM: {
-		uint32_t phys;
-		struct mc_ioctl_resolv_wsm wsm;
-		if (copy_from_user(&wsm, uarg, sizeof(wsm)))
+		uint32_t handle, phys;
+		if (get_user(handle, uarg))
 			return -EFAULT;
-		phys = mc_find_wsm_l2(instance, wsm.handle, wsm.fd);
+		phys = mc_find_wsm_l2(instance, handle);
 		if (!phys)
-			return -EINVAL;
-
-		wsm.phys = phys;
-		if (copy_to_user(uarg, &wsm, sizeof(wsm)))
 			return -EFAULT;
-		ret = 0;
+		ret = put_user(phys, uarg);
 		break;
 	}
 	case MC_IO_RESOLVE_CONT_WSM: {
@@ -912,8 +758,7 @@ static long mc_fd_admin_ioctl(struct file *file, unsigned int cmd,
 		uint32_t phys = 0, len = 0;
 		if (copy_from_user(&cont_wsm, uarg, sizeof(cont_wsm)))
 			return -EFAULT;
-		ret = mc_find_cont_wsm(instance, cont_wsm.handle, cont_wsm.fd,
-					&phys, &len);
+		ret = mc_find_cont_wsm(instance, cont_wsm.handle, &phys, &len);
 		if (!ret) {
 			cont_wsm.phys = phys;
 			cont_wsm.length = len;
@@ -940,13 +785,6 @@ static long mc_fd_admin_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	case MC_IO_MAP_PWSM:{
-		break;
-	}
-
-	case MC_IO_LOG_SETUP: {
-#ifdef MC_MEM_TRACES
-		ret = mobicore_log_setup();
-#endif
 		break;
 	}
 
@@ -1081,10 +919,6 @@ int mc_release_instance(struct mc_instance *instance)
 
 	/* Check if some buffers are orphaned. */
 	list_for_each_entry_safe(buffer, tmp, &ctx.cont_bufs, list) {
-		/* It's safe here to only call free_buffer() without unmapping
-		 * because mmap() takes a refcount to the file's fd so only
-		 * time we end up here is when everything has been unmaped or
-		 * the process called exit() */
 		if (buffer->instance == instance) {
 			buffer->instance = NULL;
 			free_buffer(buffer, false);
@@ -1214,6 +1048,13 @@ static const struct file_operations mc_admin_fops = {
 	.read		= mc_fd_read,
 };
 
+static struct miscdevice mc_admin_device = {
+	.name	= MC_ADMIN_DEVNODE,
+	.mode	= (S_IRWXU),
+	.minor	= MISC_DYNAMIC_MINOR,
+	.fops	= &mc_admin_fops,
+};
+
 /* function table structure of this device driver. */
 static const struct file_operations mc_user_fops = {
 	.owner		= THIS_MODULE,
@@ -1223,80 +1064,30 @@ static const struct file_operations mc_user_fops = {
 	.mmap		= mc_fd_mmap,
 };
 
-static int create_devices(void)
-{
-	int ret = 0;
-
-	cdev_init(&mc_admin_cdev, &mc_admin_fops);
-	cdev_init(&mc_user_cdev, &mc_user_fops);
-
-	mc_device_class = class_create(THIS_MODULE, "mobicore");
-	if (IS_ERR(mc_device_class)) {
-		MCDRV_DBG_ERROR(mcd, "failed to create device class");
-		ret = PTR_ERR(mc_device_class);
-		goto out;
-	}
-
-	ret = alloc_chrdev_region(&mc_dev_admin, 0, MC_DEV_MAX, "mobicore");
-	if (ret < 0) {
-		MCDRV_DBG_ERROR(mcd, "failed to allocate char dev region\n");
-		goto error;
-	}
-	mc_dev_user = MKDEV(MAJOR(mc_dev_admin), 1);
-
-	//MCDRV_DBG_VERBOSE(mcd, "%s: dev %d", "mobicore", MAJOR(mc_dev_region));
-
-	/* First the ADMIN node */
-	ret = cdev_add(&mc_admin_cdev,  mc_dev_admin, 1);
-	if (ret != 0) {
-		MCDRV_DBG_ERROR(mcd, "admin device register failed\n");
-		goto error;
-	}
-	mc_admin_cdev.owner = THIS_MODULE;
-	device_create(mc_device_class, NULL, mc_dev_admin, NULL,
-		      MC_ADMIN_DEVNODE);
-
-	/* Then the user node */
-
-	ret = cdev_add(&mc_user_cdev, mc_dev_user, 1);
-	if (ret != 0) {
-		MCDRV_DBG_ERROR(mcd, "user device register failed\n");
-		goto error_unregister;
-	}
-	mc_user_cdev.owner = THIS_MODULE;
-	device_create(mc_device_class, NULL, mc_dev_user, NULL,
-		      MC_USER_DEVNODE);
-
-	goto out;
-error_unregister:
-	device_destroy(mc_device_class, mc_dev_admin);
-	device_destroy(mc_device_class, mc_dev_user);
-
-	cdev_del(&mc_admin_cdev);
-	cdev_del(&mc_user_cdev);
-	unregister_chrdev_region(mc_dev_admin, MC_DEV_MAX);
-error:
-	class_destroy(mc_device_class);
-out:
-	return ret;
-}
+static struct miscdevice mc_user_device = {
+	.name	= MC_USER_DEVNODE,
+	.mode	= (S_IRWXU | S_IRWXG | S_IRWXO),
+	.minor	= MISC_DYNAMIC_MINOR,
+	.fops	= &mc_user_fops,
+};
 
 /*
  * This function is called the kernel during startup or by a insmod command.
- * This device is installed and registered as cdev, then interrupt and
+ * This device is installed and registered as miscdevice, then interrupt and
  * queue handling is set up
  */
 static int __init mobicore_init(void)
 {
 	int ret = 0;
+
 	dev_set_name(mcd, "mcd");
 
-	dev_info(mcd, "MobiCore Driver, Build: " __TIMESTAMP__ "\n");
-	dev_info(mcd, "MobiCore mcDrvModuleApi version is %i.%i\n",
-		 MCDRVMODULEAPI_VERSION_MAJOR,
-		 MCDRVMODULEAPI_VERSION_MINOR);
+	MCDRV_DBG(mcd, "enter (Build " __TIMESTAMP__ ")\n");
+	MCDRV_DBG(mcd, "mcDrvModuleApi version is %i.%i\n",
+		  MCDRVMODULEAPI_VERSION_MAJOR,
+		  MCDRVMODULEAPI_VERSION_MINOR);
 #ifdef MOBICORE_COMPONENT_BUILD_TAG
-	dev_info(mcd, "MobiCore %s\n", MOBICORE_COMPONENT_BUILD_TAG);
+	MCDRV_DBG(mcd, "%s\n", MOBICORE_COMPONENT_BUILD_TAG);
 #endif
 	/* Hardware does not support ARM TrustZone -> Cannot continue! */
 	if (!has_security_extensions()) {
@@ -1311,21 +1102,13 @@ static int __init mobicore_init(void)
 		return -ENODEV;
 	}
 
-	ret = mc_fastcall_init(&ctx);
-	if (ret)
-		goto error;
-
 	init_completion(&ctx.isr_comp);
-
-	/* initialize event counter for signaling of an IRQ to zero */
-	atomic_set(&ctx.isr_counter, 0);
-
 	/* set up S-SIQ interrupt handler */
 	ret = request_irq(MC_INTR_SSIQ, mc_ssiq_isr, IRQF_TRIGGER_RISING,
 			MC_ADMIN_DEVNODE, &ctx);
 	if (ret != 0) {
 		MCDRV_DBG_ERROR(mcd, "interrupt request failed\n");
-		goto err_req_irq;
+		goto error;
 	}
 
 #ifdef MC_PM_RUNTIME
@@ -1336,15 +1119,26 @@ static int __init mobicore_init(void)
 	}
 #endif
 
-	ret = create_devices();
-	if (ret != 0)
-		goto free_pm;
+	ret = misc_register(&mc_admin_device);
+	if (ret != 0) {
+		MCDRV_DBG_ERROR(mcd, "admin device register failed\n");
+		goto free_isr;
+	}
+
+	ret = misc_register(&mc_user_device);
+	if (ret != 0) {
+		MCDRV_DBG_ERROR(mcd, "user device register failed\n");
+		goto free_admin;
+	}
+
+#ifdef MC_MEM_TRACES
+	mobicore_log_setup();
+#endif
+
+	/* initialize event counter for signaling of an IRQ to zero */
+	atomic_set(&ctx.isr_counter, 0);
 
 	ret = mc_init_l2_tables();
-
-#ifdef MC_CRYPTO_CLOCK_MANAGEMENT
-	ret = mc_pm_clock_initialize();
-#endif
 
 	/*
 	 * initialize unique number counter which we can use for
@@ -1364,14 +1158,10 @@ static int __init mobicore_init(void)
 	MCDRV_DBG(mcd, "initialized\n");
 	return 0;
 
-free_pm:
-#ifdef MC_PM_RUNTIME
-	mc_pm_free();
+free_admin:
+	misc_deregister(&mc_admin_device);
 free_isr:
 	free_irq(MC_INTR_SSIQ, &ctx);
-#endif
-err_req_irq:
-	mc_fastcall_destroy();
 error:
 	return ret;
 }
@@ -1392,19 +1182,10 @@ static void __exit mobicore_exit(void)
 	mc_pm_free();
 #endif
 
-	device_destroy(mc_device_class, mc_dev_admin);
-	device_destroy(mc_device_class, mc_dev_user);
-	class_destroy(mc_device_class);
-	unregister_chrdev_region(mc_dev_admin, MC_DEV_MAX);
-
 	free_irq(MC_INTR_SSIQ, &ctx);
 
-	mc_fastcall_destroy();
-
-#ifdef MC_CRYPTO_CLOCK_MANAGEMENT
-	mc_pm_clock_finalize();
-#endif
-
+	misc_deregister(&mc_admin_device);
+	misc_deregister(&mc_user_device);
 	MCDRV_DBG_VERBOSE(mcd, "exit");
 }
 
@@ -1412,6 +1193,6 @@ static void __exit mobicore_exit(void)
 module_init(mobicore_init);
 module_exit(mobicore_exit);
 MODULE_AUTHOR("Giesecke & Devrient GmbH");
-MODULE_AUTHOR("Trustonic Limited");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MobiCore driver");
+

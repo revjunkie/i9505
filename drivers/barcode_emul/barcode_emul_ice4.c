@@ -43,13 +43,15 @@
 #if defined(CONFIG_IR_REMOCON_FPGA)
 #include <linux/ir_remote_con.h>
 #endif
+//#define USING_CONSUMERIR_SERVICE 1// Allows ConsumerIR service
+#ifdef USING_CONSUMERIR_SERVICE 
+#include <linux/miscdevice.h>
+#endif
 #include "barcode_emul_ice4.h"
 #include <linux/err.h>
 #if defined(CONFIG_MACH_JF_DCM)
 #include <mach/apq8064-gpio.h>
 #endif
-
-#define US_TO_PATTERN		1000000
 
 #if defined(TEST_DEBUG)
 #define pr_barcode	pr_emerg
@@ -72,7 +74,7 @@
 #define IRDA_I2C_ADDR		0x50
 #define IRDA_TEST_CODE_SIZE	140
 #define IRDA_TEST_CODE_ADDR	0x00
-#define MAX_SIZE		2048
+#define MAX_SIZE		4096
 #define READ_LENGTH	8
 #endif
 
@@ -102,6 +104,9 @@ static int ack_number;
 static int count_number;
 #endif
 static struct barcode_emul_platform_data *g_pdata;
+#ifdef USING_CONSUMERIR_SERVICE
+static struct barcode_emul_data *g_data;
+#endif
 static int Is_beaming;
 static struct mutex		en_mutex;
 static struct i2c_client *g_client;
@@ -130,6 +135,7 @@ static void fpga_enable(int enable, int bdelay)
 				usleep_range(20000, 25000);
 			else
 				usleep_range(1000, 2000);
+			
 			gpio_set_value(g_pdata->rst_n, GPIO_LEVEL_LOW);
 			if (g_pdata->clock_en)
 				g_pdata->clock_en(0);
@@ -167,6 +173,7 @@ static void fpga_enable(int enable)
 		}else{
 			enable_count--;
 		}
+		
 	}
 }
 #endif
@@ -259,18 +266,8 @@ static int barcode_fpga_fimrware_update_start(const u8 *data, int len)
 
 void ice4_fpga_firmware_update(void)
 {
-	if (g_pdata->fw_type == ICE_19M)
-		barcode_fpga_fimrware_update_start(spiword,
-						sizeof(spiword));
-	else if (g_pdata->fw_type == ICE_I2C)
-		barcode_fpga_fimrware_update_start(spiword_i2c,
-						sizeof(spiword_i2c));
-	else if (g_pdata->fw_type == ICE_24M)
-		barcode_fpga_fimrware_update_start(spiword_24m,
-						sizeof(spiword_24m));
-	else
-		barcode_fpga_fimrware_update_start(spiword,
-						sizeof(spiword));
+	barcode_fpga_fimrware_update_start(spiword_24m,
+					sizeof(spiword_24m));
 	//verification with dummy gpio
 	ice_gpiox_get(1);
 }
@@ -668,6 +665,7 @@ static void ir_remocon_work(struct barcode_emul_data *ir_data, int count)
 	int ret;
 	int emission_time;
 	int ack_pin_onoff;
+	/*int i = 0;*/
 
 	/* Put code here to handle the extra bytes from CRC and repeat frame length */
 
@@ -738,17 +736,23 @@ static void ir_remocon_work(struct barcode_emul_data *ir_data, int count)
 
 	mutex_unlock(&data->mutex);
 
-/*
-	for (int i = 0; i < buf_size; i++) {
+
+/*	for (i = 0; i < buf_size; i++) {
 		printk(KERN_INFO "%s: data[%d] : 0x%02x\n", __func__, i,
 				data->i2c_block_transfer.data[i]);
-	}
-*/
+	}*/
+
+#ifdef USING_CONSUMERIR_SERVICE
+	data->count = 0;
+	data->length = 0;
+#else
 	data->count = 2;
-	emission_time = \
-		(1000 * (data->ir_sum) / (data->ir_freq));
+#endif
+
+	emission_time = data->ir_sum;
+
 	if (emission_time > 0)
-		msleep(emission_time);
+		usleep(emission_time);
 		pr_barcode("%s: emission_time = %d\n",
 					__func__, emission_time);
 
@@ -782,8 +786,8 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t size)
 {
 	struct barcode_emul_data *data = dev_get_drvdata(dev);
-	unsigned int _data, _tdata;
-	int count, i, converting_factor = 1;
+	unsigned int _data;
+	int count, i;
 
 	pr_barcode("ir_send called\n");
 
@@ -791,10 +795,9 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 		if (sscanf(buf++, "%u", &_data) == 1) {
 			if (_data == 0 || buf == '\0')
 				break;
-			// 2 is the initial value of count
+
 			if (data->count == 2) {
 				data->ir_freq = _data;
-				converting_factor = US_TO_PATTERN / data->ir_freq;
 				data->i2c_block_transfer.data[2]
 								= _data >> 16;
 				data->i2c_block_transfer.data[3]
@@ -803,14 +806,13 @@ static ssize_t remocon_store(struct device *dev, struct device_attribute *attr,
 								= _data & 0xFF;
 				data->count += 3;
 			} else {
-				_tdata = _data / converting_factor;
-				data->ir_sum += _tdata;
+				data->ir_sum += _data;
 				count = data->count;
-				data->i2c_block_transfer.data[count]
-								= _tdata >> 8;
-				data->i2c_block_transfer.data[count+1]
-								= _tdata & 0xFF;
-				data->count += 2;
+				data->i2c_block_transfer.data[count]   = _data >> 24;
+				data->i2c_block_transfer.data[count+1] = _data >> 16;
+				data->i2c_block_transfer.data[count+2] = _data >> 8;
+				data->i2c_block_transfer.data[count+3] = _data & 0xFF;
+				data->count += 4;
 			}
 
 			while (_data > 0) {
@@ -990,7 +992,150 @@ static struct device_attribute ir_attrs[] = {
 	__ATTR(irda_test, S_IRUGO|S_IWUSR|S_IWGRP, irda_test_show, irda_test_store)
 };
 #endif
+/* start of IOCTL related implementation */
+// JINHO : Can we use only ioctl func?
+#ifdef USING_CONSUMERIR_SERVICE
+/* 
+ * in barcode_emul_data data;
+ * data.count = number of bytes to be transmitted without crc
+ * data.length = number of integer elements inside a message for an operation
+ * 				 this comes by IOCTL_SET_DATA
+ * data.i2c_block_transfer.addr holds the 0x00 and
+ * data.i2c_block_transfer.data[] holds the bytes to transfer.
+ */
+static int ice4_open(struct inode *inode, struct file *file)
+{
+	int err = 0;
 
+	pr_barcode("called");
+	err = nonseekable_open(inode, file);
+	if (err)
+		return err;
+	file->private_data = g_data;
+	// impossible
+	return 0;
+}
+static int ice4_release(struct inode *inode, struct file *file)
+{
+//	struct barcode_emul_data *data = file->private_data;
+	pr_barcode("called");
+	return 0;
+}
+#define FLAG_SET        1
+#define FLAG_CLR        0
+static int pattern_flag_set = FLAG_CLR;
+static void store_pattern(struct barcode_emul_data **data, int pattern[], int length) {
+	int i = 0;
+	(*data)->i2c_block_transfer.addr    = 0x00;
+	// i2c_block_transfer.data[0] and data[1] to be set later in ir_remocon_work
+	(*data)->i2c_block_transfer.data[2] = (*data)->ir_freq >> 16;
+	(*data)->i2c_block_transfer.data[3] = ((*data)->ir_freq >> 8) & 0xFF;
+	(*data)->i2c_block_transfer.data[4] = (*data)->ir_freq & 0xFF;
+	(*data)->count = 5;
+	for (; i < length; i = i + 1) {
+		(*data)->ir_sum += pattern[i];
+		(*data)->i2c_block_transfer.data[2*i + 5] = pattern[i] >> 8;
+		(*data)->i2c_block_transfer.data[2*i + 6] = pattern[i] & 0xFF;
+		(*data)->count += 2;
+	}
+	pattern_flag_set = FLAG_SET;
+}
+static long ice4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+//	void __user *argp = (void __user *) arg;
+	struct barcode_emul_data *data = file->private_data;
+	pr_barcode("barcode ioctl called");
+	switch (cmd) {
+		case IR_IOCTL_SET_FREQ:
+		{
+			int freq;
+			freq = (int)arg;
+			if(freq < 0) {
+				pr_barcode("Improper data for frequency\n");
+				return -EINVAL;
+			}
+			pr_barcode("SET_FREQ cmd %d\n", freq);
+			data->ir_freq = freq;
+			break;
+		}
+		case IR_IOCTL_SET_SIZE:
+		{
+			int size;
+			size = (int)arg;
+			if(size < 0) {	// Choose a better error bound checking value here
+				pr_barcode("Re-enter pattern size\n");
+				return -EINVAL;
+			}
+			pr_barcode("SET_SIZE cmd %d\n", size);
+			data->length = size;
+			break;
+		}
+		case IR_IOCTL_SET_DATA:
+		{
+			int *pattern;
+			if (data->ir_freq == 0) {
+				pr_barcode("ir_freq is NOT set\n");
+				return -EIO;
+			}
+			if (data->length == 0) {
+				pr_barcode("pattern size is NOT set\n");
+				return -EIO;
+			}
+			pattern = kmalloc(((data->length)*sizeof(int)), GFP_KERNEL);
+			if(!pattern)
+				return -ENOMEM;
+			if(copy_from_user(pattern, (int *)arg, (sizeof(int)*(data->length)))) {
+				pr_barcode("Re-enter the pattern array\n");
+				return -EINVAL;
+			}
+			pr_barcode("SET_DATA cmd\n");
+			pr_barcode("1st / 2nd value : %d, %d\n", pattern[0], pattern[1]);
+			/* get the whole data (address) change the input from integers to character byte storage */
+			store_pattern(&data, pattern, data->length);
+			kfree(pattern);
+			break;
+		}
+		case IR_IOCTL_START:
+		{
+			if (pattern_flag_set != FLAG_SET) {
+				pr_barcode("transmission pattern is NOT set\n");
+				return -EIO;
+			}
+			// Safe to call now and reset the pattern_flag_set;
+			pattern_flag_set = FLAG_CLR;
+			ir_remocon_work(data, data->count);
+			/* we can control it in "remocon_store" function and this function must not call "ir_remocon_work" */
+			break;
+		}
+		case IR_IOCTL_STOP:
+		{
+			/* RESERVED */
+			/* I think it is impossible in this version of firmware */
+			break;
+		}
+		default:
+		{
+			pr_barcode("Unknown CMD\n");
+			return -ENOTTY;
+		}
+	}
+	return 0;
+}
+//JINHO : also, we need file_operations stucture for misc device
+static const struct file_operations ice4_fops = {
+	.owner = THIS_MODULE,
+	.open = ice4_open,
+	.release = ice4_release,
+	.unlocked_ioctl = ice4_ioctl,
+};
+//JINHO : How can we select the proper number of device?
+static struct miscdevice ice4_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "ice4_dev",
+	.fops = &ice4_fops,
+};
+/* end of IOCTL related implementation information */
+#endif
 static int ice_gpio_get(struct gpio_chip *chip, unsigned offset)
 {
 	return ice_gpiox_get((unsigned)offset);
@@ -1179,11 +1324,25 @@ static int __devinit barcode_emul_probe(struct i2c_client *client,
 #ifdef CONFIG_IR_REMOCON_FPGA
 	data->pdata = client->dev.platform_data;
 	mutex_init(&data->mutex);
+#ifdef USING_CONSUMERIR_SERVICE
+	data->count = 0;
+	data->length = 0;
+	data->ir_sum = 0;
+#else
 	data->count = 2;
+#endif
+	data->ir_freq = 0;
 	data->on_off = 0;
 #endif
 	i2c_set_clientdata(client, data);
-
+#ifdef USING_CONSUMERIR_SERVICE
+	g_data = data;
+	if(misc_register(&ice4_device)) {
+		pr_err("ice4_probe: ice4_device register failed\n");
+		goto exit_misc_device_register_failed;
+	}
+#endif
+	/* Registration of sysfs interface */
 	barcode_emul_dev = device_create(sec_class, NULL, 0,
 				data, "sec_barcode_emul");
 
@@ -1235,7 +1394,9 @@ static int __devinit barcode_emul_probe(struct i2c_client *client,
 	Is_beaming = BEAMING_OFF;
 
 	pr_err("probe complete %s\n", __func__);
-
+#ifdef USING_CONSUMERIR_SERVICE
+exit_misc_device_register_failed:
+#endif
 	return 0;
 
 err_free_mem:
@@ -1248,6 +1409,9 @@ static int __devexit barcode_emul_remove(struct i2c_client *client)
 	struct barcode_emul_data *data = i2c_get_clientdata(client);
 
 	i2c_set_clientdata(client, NULL);
+#ifdef USING_CONSUMERIR_SERVICE
+	misc_deregister(&ice4_device);
+#endif
 	kfree(data);
 	return 0;
 }

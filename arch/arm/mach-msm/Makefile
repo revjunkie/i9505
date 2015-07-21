@@ -264,7 +264,7 @@ obj-$(CONFIG_ARCH_MSM8960) += memory_topology.o
 obj-$(CONFIG_ARCH_MSM8960) += saw-regulator.o
 obj-$(CONFIG_ARCH_MSM8960) += devices-8960.o
 obj-$(CONFIG_ARCH_APQ8064) += devices-8960.o devices-8064.o
-obj-$(CONFIG_INPUT_TOUCHSCREEN) += board-mxt540s-tsp.o 
+obj-$(CONFIG_INPUT_TOUCHSCREEN) += board-mxt540s-tsp.o board-s5000-tsp.o
 obj-$(CONFIG_ARCH_APQ8064) += acpuclock-8064.o
 board-8960-all-objs += board-8960.o board-8960-camera.o board-8960-display.o board-8960-pmic.o board-8960-storage.o board-8960-gpiomux.o
 board-8930-all-objs += board-8930.o board-8930-camera.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-8930-gpiomux.o devices-8930.o board-8930-gpu.o
@@ -276,35 +276,9 @@ obj-$(CONFIG_MACH_MSM8930_CDP) += board-8930-all.o board-8930-regulator-pm8038.o
 obj-$(CONFIG_MACH_MSM8930_MTP) += board-8930-all.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
 obj-$(CONFIG_MACH_MSM8930_FLUID) += board-8930-all.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
 obj-$(CONFIG_MACH_MSM8930_EVT) += board-8930-all.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
-obj-$(CONFIG_MACH_MELIUS) += board-melius.o board-s5000-tsp_msm8930.o board-8930-camera-power.o board-8930-camera.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-melius-gpiomux.o devices-8930.o board-8930-gpu.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
-obj-$(CONFIG_MACH_CANE) += board-cane.o board-8930-camera-power.o board-8930-camera.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-cane-gpiomux.o devices-8930.o board-8930-gpu.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o
-obj-$(CONFIG_MACH_SERRANO) += board-serrano.o board-8930-camera.o board-8930-camera-power.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-serrano-gpiomux.o devices-8930.o board-8930-gpu.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o board-8930-input-mxt.o board-8930-input-tkey-serrano.o
-obj-$(CONFIG_MACH_GOLDEN) += board-golden.o board-8930-camera.o board-8930-camera-power.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-golden-gpiomux.o devices-8930.o board-8930-gpu.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o board-8930-input-mxt.o  board-8930-input-tkey.o
-obj-$(CONFIG_MACH_LT02) += board-lt02.o board-8930-camera-power.o board-8930-camera.o board-8930-display.o board-8930-pmic.o board-8930-storage.o board-lt02-gpiomux.o devices-8930.o board-8930-gpu.o board-8930-regulator-pm8038.o board-8930-regulator-pm8917.o  board-8930-input-zinitix.o board-lt02-battery.o
-ifdef CONFIG_MACH_SERRANO
-obj-$(CONFIG_CHARGER_MAX77XXX) += board-serrano-battery.o
-obj-$(CONFIG_PM8921_BMS) += bms-batterydata-serrano.o
-endif
-ifdef CONFIG_MACH_GOLDEN
-obj-$(CONFIG_PM8921_BMS) += bms-batterydata-express2.o
-obj-$(CONFIG_CHARGER_SMB358) += board-golden-battery.o
-endif
-obj-$(CONFIG_TOUCHSCREEN_CYPRESS_TMA46X)	+=board-touch-cyttsp4_core.o
-ifdef CONFIG_MACH_CANE
-obj-$(CONFIG_CHARGER_MAX77XXX) += board-cane-battery.o
-obj-$(CONFIG_PM8921_BMS) += bms-batterydata-cane.o bms-batterydata-cane2.o
-endif
-ifdef CONFIG_MACH_WILCOX_EUR_LTE
-obj-$(CONFIG_CHARGER_MAX77XXX) += board-wilcox-battery.o
-obj-$(CONFIG_PM8921_BMS) += bms-batterydata-wilcox.o
-endif
 obj-$(CONFIG_PM8921_BMS) += bms-batterydata.o bms-batterydata-desay.o batterydata-lib.o
 obj-$(CONFIG_MACH_APQ8064_CDP) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_APQ8064_MTP) += board-8064-all.o board-8064-regulator.o
-obj-$(CONFIG_MACH_M2_ATT) += board-8960-regulator.o board-m2_att.o board-m2_att-gpiomux.o board-8960-camera.o board-8960-display.o board-8960-pmic.o board-8960-storage.o board-mms-tsp.o board-8960-wifi.o
-obj-$(CONFIG_MACH_M2_SPR) += board-8960-regulator.o board-m2_spr.o board-m2_spr-gpiomux.o board-8960-camera.o board-8960-display.o board-8960-pmic.o board-8960-storage.o board-mms-tsp.o board-8960-wifi.o
-obj-$(CONFIG_MACH_M2_VZW) += board-8960-regulator.o board-m2_vzw.o board-m2_vzw-gpiomux.o board-8960-camera.o board-8960-display.o board-8960-pmic.o board-8960-storage.o board-mms-tsp.o board-8960-wifi.o
-obj-$(CONFIG_MACH_COMANCHE) += board-8960-regulator.o board-comanche.o board-comanche-gpiomux.o board-8960-camera.o board-8960-display.o board-8960-pmic.o board-8960-storage.o board-mms-tsp.o
 obj-$(CONFIG_MACH_APQ8064_LIQUID) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_MPQ8064_HRD) += board-8064-all.o board-8064-regulator.o
 obj-$(CONFIG_MACH_MPQ8064_DTV) += board-8064-all.o board-8064-regulator.o
@@ -327,9 +301,6 @@ board-8064-common-all-objs += board-8064-pmic.o board-8064-storage.o board-8064-
 ifdef CONFIG_BCM4335
 board-8064-common-all-objs += board-8064-wifi.o board-8064-bt.o
 endif
-ifdef CONFIG_BCM4334
-board-msm8960-common-all-objs += board-8960-wifi.o
-endif
 obj-$(CONFIG_MACH_JF_VZW) += board-jf_vzw.o board-jf_vzw-gpiomux.o
 obj-$(CONFIG_MACH_JF_SPR) += board-jf_spr.o board-jf_spr-gpiomux.o
 obj-$(CONFIG_MACH_JF_ATT) += board-jf_att.o board-jf_att-gpiomux.o
@@ -340,13 +311,10 @@ obj-$(CONFIG_MACH_JF_SKT) += board-jf_skt.o board-jf_skt-gpiomux.o
 obj-$(CONFIG_MACH_JF_KTT) += board-jf_ktt.o board-jf_ktt-gpiomux.o
 obj-$(CONFIG_MACH_JF_LGT) += board-jf_lgt.o board-jf_lgt-gpiomux.o
 obj-$(CONFIG_MACH_JF_DCM) += board-jf_dcm.o board-jf_dcm-gpiomux.o
-obj-$(CONFIG_MACH_JFVE_EUR) += board-jfve_eur.o board-jfve_eur-gpiomux.o
 obj-$(CONFIG_MACH_JACTIVE_EUR) += board-jactive_eur.o board-jactive_eur-gpiomux.o
 obj-$(CONFIG_MACH_JACTIVE_ATT) += board-jactive_att.o board-jactive_att-gpiomux.o
 obj-$(CONFIG_MACH_JF_CRI) += board-jf_cri.o board-jf_cri-gpiomux.o
-obj-$(CONFIG_MACH_JF) += board-fusion3-battery.o board-s5000-tsp.o
-obj-$(CONFIG_MACH_COMANCHE) += board-comanche-battery.o
-obj-$(CONFIG_MACH_MELIUS) += board-melius-battery.o
+obj-$(CONFIG_MACH_JF) += board-fusion3-battery.o
 obj-$(CONFIG_MACH_JF_VZW) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_SPR) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_ATT) += board-8064-common-all.o
@@ -357,7 +325,6 @@ obj-$(CONFIG_MACH_JF_SKT) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_KTT) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_LGT) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_DCM) += board-8064-common-all.o
-obj-$(CONFIG_MACH_JFVE_EUR) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JACTIVE_EUR) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JACTIVE_ATT) += board-8064-common-all.o
 obj-$(CONFIG_MACH_JF_CRI) += board-8064-common-all.o
@@ -440,19 +407,7 @@ obj-$(CONFIG_MSM_HSIC_SYSMON) += hsic_sysmon.o
 obj-$(CONFIG_MSM_HSIC_SYSMON_TEST) += hsic_sysmon_test.o
 
 obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
-ifdef CONFIG_MACH_JF
 obj-$(CONFIG_MFD_MAX77693) += sec-switch.o
-endif
-
-ifdef CONFIG_SEC_PRODUCT_8930
-obj-$(CONFIG_MACH_MELIUS) += sec-switch_msm8930.o
-obj-$(CONFIG_MACH_SERRANO_ATT) += sec-switch_serrano.o
-obj-$(CONFIG_MACH_SERRANO_USC) += sec-switch_serrano.o
-obj-$(CONFIG_MACH_SERRANO_SPR) += sec-switch_serrano.o
-obj-$(CONFIG_MACH_SERRANO_VZW) += sec-switch_serrano.o
-obj-$(CONFIG_MACH_SERRANO_LRA) += sec-switch_serrano.o
-endif
-
 obj-$(CONFIG_MSM_CPR) += msm_cpr.o
 obj-$(CONFIG_MSM_VP_REGULATOR) += msm_vp.o
 
@@ -464,19 +419,8 @@ endif
 obj-$(CONFIG_MSM_CPU_PWRCTL) +=  msm_cpu_pwrctl.o
 
 obj-$(CONFIG_ARCH_RANDOM) += early_random.o
-
 ifdef CONFIG_SEC_THERMISTOR
-obj-$(CONFIG_SEC_THERMISTOR) += sec_thermistor.o
-obj-$(CONFIG_MACH_MELIUS) += msm8930-thermistor.o
-obj-$(CONFIG_MACH_CANE) += msm8930-thermistor.o
-obj-$(CONFIG_MACH_SERRANO) += msm8930-thermistor.o
-obj-$(CONFIG_MACH_LT02) += msm8930-thermistor.o
-obj-$(CONFIG_MACH_GOLDEN) += msm8930-thermistor.o
-obj-$(CONFIG_MACH_JF) += fusion3-thermistor.o
-obj-$(CONFIG_MACH_M2) += midas-thermistor.o
+obj-$(CONFIG_SEC_THERMISTOR) += sec_thermistor.o fusion3-thermistor.o
 endif
 
-
 obj-$(CONFIG_BT_BCM4335) += board-bluetooth-bcm4335.o
-
-obj-$(CONFIG_BT_BCM4334) += board-bluetooth-bcm4334.o

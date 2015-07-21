@@ -131,9 +131,8 @@ config SECURITY_SELINUX_POLICYDB_VERSION_MAX_VALUE
 	  installed under /etc/selinux/$SELINUXTYPE/policy, where
 	  SELINUXTYPE is defined in your /etc/selinux/config.
 
-config SEC_SELINUX
-	bool "SEC SELinux"
-	depends on SECURITY_SELINUX
+config SECURITY_SEC
+	bool "Security SEC"
 	default n
-	help
-	  This option adds sec selinux feature
+	---help---
+	  Enable the Security SEC in SELinux

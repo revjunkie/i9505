@@ -414,48 +414,50 @@ out:
 
 static int set_name(struct ashmem_area *asma, void __user *name)
 {
-	char lname[ASHMEM_NAME_LEN];
-	int len;
 	int ret = 0;
 
-	len = strncpy_from_user(lname, name, ASHMEM_NAME_LEN);
-	if (len < 0)
-		return len;
-	if (len == ASHMEM_NAME_LEN)
-		lname[ASHMEM_NAME_LEN - 1] = '\0';
 	mutex_lock(&ashmem_mutex);
 
 	/* cannot change an existing mapping's name */
-	if (unlikely(asma->file))
+	if (unlikely(asma->file)) {
 		ret = -EINVAL;
-	else
-		strcpy(asma->name + ASHMEM_NAME_PREFIX_LEN, lname);
+		goto out;
+	}
 
+	if (unlikely(copy_from_user(asma->name + ASHMEM_NAME_PREFIX_LEN,
+				    name, ASHMEM_NAME_LEN)))
+		ret = -EFAULT;
+	asma->name[ASHMEM_FULL_NAME_LEN-1] = '\0';
+
+out:
 	mutex_unlock(&ashmem_mutex);
+
 	return ret;
 }
 
 static int get_name(struct ashmem_area *asma, void __user *name)
 {
 	int ret = 0;
-	char lname[ASHMEM_NAME_LEN];
-	size_t len;
 
 	mutex_lock(&ashmem_mutex);
 	if (asma->name[ASHMEM_NAME_PREFIX_LEN] != '\0') {
+		size_t len;
+
 		/*
 		 * Copying only `len', instead of ASHMEM_NAME_LEN, bytes
 		 * prevents us from revealing one user's stack to another.
 		 */
 		len = strlen(asma->name + ASHMEM_NAME_PREFIX_LEN) + 1;
-		memcpy(lname, asma->name + ASHMEM_NAME_PREFIX_LEN, len);
+		if (unlikely(copy_to_user(name,
+				asma->name + ASHMEM_NAME_PREFIX_LEN, len)))
+			ret = -EFAULT;
 	} else {
-		len = strlen(ASHMEM_NAME_DEF) + 1;
-		memcpy(lname, ASHMEM_NAME_DEF, len);
+		if (unlikely(copy_to_user(name, ASHMEM_NAME_DEF,
+					  sizeof(ASHMEM_NAME_DEF))))
+			ret = -EFAULT;
 	}
 	mutex_unlock(&ashmem_mutex);
-	if (unlikely(copy_to_user(name, lname, len)))
-		ret = -EFAULT;
+
 	return ret;
 }
 

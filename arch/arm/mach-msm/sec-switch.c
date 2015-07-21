@@ -12,11 +12,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/spi_gpio.h>
 #include <linux/gpio.h>
-#ifdef CONFIG_SEC_PRODUCT_8960
-#include <linux/gpio_keys_msm8960.h>
-#else
 #include <linux/gpio_keys.h>
-#endif
 #include <linux/gpio_event.h>
 #include <linux/i2c.h>
 #include <linux/i2c-gpio.h>
@@ -60,11 +56,7 @@
 #endif
 
 #ifdef CONFIG_KEYBOARD_CYPRESS_TOUCH_236
-#ifdef CONFIG_SEC_PRODUCT_8960
-#include <linux/i2c/cypress_touchkey_msm8960.h>
-#else
 #include <linux/i2c/cypress_touchkey.h>
-#endif
 #endif
 
 #include <linux/sec_class.h>
@@ -172,10 +164,10 @@ int max77693_muic_charger_cb(enum cable_type_muic cable_type)
 {
 #ifdef CONFIG_CHARGER_MAX77693
 	struct power_supply *psy = power_supply_get_by_name("battery");
-	struct power_supply *psy_ps = power_supply_get_by_name("ps");
 	union power_supply_propval value;
 	static enum cable_type_muic previous_cable_type = CABLE_TYPE_NONE_MUIC;
 #endif
+	pr_info("%s: %d\n", __func__, cable_type);
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI
 
@@ -186,9 +178,7 @@ int max77693_muic_charger_cb(enum cable_type_muic cable_type)
 #endif
 
 #ifdef CONFIG_KEYBOARD_CYPRESS_TOUCH_236
-#ifndef CONFIG_SEC_PRODUCT_8960 
 	touchkey_charger_infom(cable_type);
-#endif
 #endif
 
 #ifdef CONFIG_JACK_MON
@@ -197,7 +187,6 @@ int max77693_muic_charger_cb(enum cable_type_muic cable_type)
 	case CABLE_TYPE_NONE_MUIC:
 	case CABLE_TYPE_JIG_UART_OFF_MUIC:
 	case CABLE_TYPE_MHL_MUIC:
-	case CABLE_TYPE_CHARGING_CABLE_MUIC:
 		is_cable_attached = false;
 		break;
 	case CABLE_TYPE_USB_MUIC:
@@ -234,6 +223,7 @@ int max77693_muic_charger_cb(enum cable_type_muic cable_type)
 		pr_info("%s: SKIP cable setting\n", __func__);
 		goto skip;
 	}
+	previous_cable_type = cable_type;
 
 	switch (cable_type) {
 	case CABLE_TYPE_NONE_MUIC:
@@ -281,34 +271,18 @@ int max77693_muic_charger_cb(enum cable_type_muic cable_type)
 	case CABLE_TYPE_INCOMPATIBLE_MUIC:
 		current_cable_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		break;
-	case CABLE_TYPE_CHARGING_CABLE_MUIC:
-		current_cable_type = POWER_SUPPLY_TYPE_POWER_SHARING;
-		break;
 	default:
 		pr_err("%s: invalid type for charger:%d\n",
 				__func__, cable_type);
 		goto skip;
 	}
 
-	pr_err("%s: cable type for charger: MUIC(%d), CHARGER(%d)\n",
-			__func__, cable_type, current_cable_type);
-	if (!psy || !psy->set_property || !psy_ps || !psy_ps->set_property) {
-		pr_err("%s: fail to get battery/ps psy\n", __func__);
-	} else {
-		if (current_cable_type == POWER_SUPPLY_TYPE_POWER_SHARING) {
-			value.intval = current_cable_type;
-			psy_ps->set_property(psy_ps, POWER_SUPPLY_PROP_ONLINE, &value);
-		} else {
-			if (previous_cable_type == CABLE_TYPE_CHARGING_CABLE_MUIC) {
-				value.intval = current_cable_type;
-				psy_ps->set_property(psy_ps, POWER_SUPPLY_PROP_ONLINE, &value);
-			} else {
-				value.intval = current_cable_type<<ONLINE_TYPE_MAIN_SHIFT;
-				psy->set_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
-			}
-		}
+	if (!psy || !psy->set_property)
+		pr_err("%s: fail to get battery psy\n", __func__);
+	else {
+		value.intval = current_cable_type<<ONLINE_TYPE_MAIN_SHIFT;
+		psy->set_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
 	}
-	previous_cable_type = cable_type;
 #endif
 skip:
 #ifdef CONFIG_JACK_MON

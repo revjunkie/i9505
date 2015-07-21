@@ -597,7 +597,6 @@ static long ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case TSPDRV_MAGIC_NUMBER:
-	case TSPDRV_SET_MAGIC_NUMBER:
 		filp->private_data = (void *)TSPDRV_MAGIC_NUMBER;
 		break;
 
@@ -615,10 +614,8 @@ static long ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		** If a stop was requested, ignore the request as the amp
 		** will be disabled by the timer proc when it's ready
 		*/
-		g_bstoprequested = true;
-		/* Last data processing to disable amp and stop timer */
-		VibeOSKernelProcessData(NULL);
-		g_bisplaying = false;
+		if (!g_bstoprequested)
+			ImmVibeSPI_ForceOut_AmpDisable(arg);
 		wake_unlock(&vib_wake_lock);
 		break;
 

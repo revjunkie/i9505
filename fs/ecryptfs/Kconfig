@@ -4,7 +4,6 @@ config ECRYPT_FS
 	select CRYPTO_ECB
 	select CRYPTO_CBC
 	select CRYPTO_MD5
-	select CRYPTO_SHA256
 	help
 	  Encrypted filesystem that operates on the VFS layer.  See
 	  <file:Documentation/filesystems/ecryptfs.txt> to learn more about
@@ -20,16 +19,3 @@ config WTL_ENCRYPTION_FILTER
 	depends on ECRYPT_FS
 	help
 	Modification of encrypted filesystem for SD card encryption
-
-config ECRYPT_FS_VIRTUAL_FAT_XATTR
-	bool "eCryptfs support on virtual FAT xattr"
-	default n
-	depends on ECRYPT_FS
-	help
-	Modification of encrypted filesystem for virtual FAT xattr
-
-config FORCE_DISABLE_FIPS
-	bool "Force disable FIPS config"
-	default n
-	help
-	  Force disable FIPS config

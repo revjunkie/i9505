@@ -1209,10 +1209,7 @@ void kgsl_timer(unsigned long data)
 {
 	struct kgsl_device *device = (struct kgsl_device *) data;
 
-	KGSL_PWR_INFO(device, "idle timer expired device %d From %s to %s \n", device->id,
-			kgsl_pwrstate_to_str( device->state),
-			kgsl_pwrstate_to_str(device->requested_state));
-
+	KGSL_PWR_INFO(device, "idle timer expired device %d\n", device->id);
 	if (device->requested_state != KGSL_STATE_SUSPEND) {
 		if (device->pwrctrl.restore_slumber ||
 					device->pwrctrl.strtstp_sleepwake)
@@ -1354,8 +1351,7 @@ _slumber(struct kgsl_device *device)
 int kgsl_pwrctrl_sleep(struct kgsl_device *device)
 {
 	int status = 0;
-	KGSL_PWR_INFO(device, "sleep device %d From %s to %s \n", device->id,
-			kgsl_pwrstate_to_str(device->state), kgsl_pwrstate_to_str(device->requested_state));
+	KGSL_PWR_INFO(device, "sleep device %d\n", device->id);
 
 	/* Work through the legal state transitions */
 	switch (device->requested_state) {
@@ -1411,8 +1407,8 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device)
 		if (context)
 			ts_processed = kgsl_readtimestamp(device, context,
 				KGSL_TIMESTAMP_RETIRED);
-		KGSL_PWR_INFO(device, "Wake from %s state to %s. CTXT: %d RTRD TS: %08X\n",
-			kgsl_pwrstate_to_str(state), kgsl_pwrstate_to_str(device->requested_state),
+		KGSL_PWR_INFO(device, "Wake from %s state. CTXT: %d RTRD TS: %08X\n",
+			kgsl_pwrstate_to_str(state),
 			context ? context->id : -1, ts_processed);
 		kgsl_context_put(context);
 		/* fall through */

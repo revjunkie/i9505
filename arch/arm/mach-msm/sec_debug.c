@@ -46,9 +46,7 @@
 #include <linux/fcntl.h>
 #include <linux/fs.h>
 #endif
-#include <linux/debugfs.h>
 #include <asm/system_info.h>
-#include <linux/seq_file.h>
 
 /* onlyjazz.ed26 : make the restart_reason global to enable it early
    in sec_debug_init and share with restart functions */
@@ -58,26 +56,9 @@
 #include <linux/circ_buf.h>
 #endif
 
-#ifdef CONFIG_USER_RESET_DEBUG
-enum sec_debug_reset_reason_t {
-	RR_S = 1,
-	RR_W = 2,
-	RR_D = 3,
-	RR_K = 4,
-	RR_M = 5,
-	RR_P = 6,
-	RR_R = 7,
-	RR_B = 8,
-	RR_N = 9,
-};
-
-static int reset_reason = RR_N;
-#endif
-
 enum sec_debug_upload_cause_t {
 	UPLOAD_CAUSE_INIT = 0xCAFEBABE,
 	UPLOAD_CAUSE_KERNEL_PANIC = 0x000000C8,
-    UPLOAD_CAUSE_POWER_LONG_PRESS = 0x00000085,
 	UPLOAD_CAUSE_FORCED_UPLOAD = 0x00000022,
 	UPLOAD_CAUSE_CP_ERROR_FATAL = 0x000000CC,
 	UPLOAD_CAUSE_MDM_ERROR_FATAL = 0x000000EE,
@@ -175,9 +156,7 @@ struct sec_debug_core_t {
 /* enable sec_debug feature */
 static unsigned enable = 1;
 static unsigned enable_user = 1;
-#ifndef CONFIG_USER_RESET_DEBUG
 static unsigned reset_reason = 0xFFEEFFEE;
-#endif
 static char sec_build_info[100];
 static unsigned int secdbg_paddr;
 static unsigned int secdbg_size;
@@ -190,12 +169,6 @@ module_param_named(enable, enable, uint, 0644);
 module_param_named(enable_user, enable_user, uint, 0644);
 module_param_named(reset_reason, reset_reason, uint, 0644);
 module_param_named(runtime_debug_val, runtime_debug_val, uint, 0644);
-#ifndef CONFIG_MACH_JF
-#ifdef CONFIG_SEC_SSR_DEBUG_LEVEL_CHK
-static unsigned enable_cp_debug = 1;
-module_param_named(enable_cp_debug, enable_cp_debug, uint, 0644);
-#endif
-#endif
 
 static int force_error(const char *val, struct kernel_param *kp);
 module_param_call(force_error, force_error, NULL, NULL, 0644);
@@ -547,7 +520,7 @@ void *kfree_hook(void *p, void *caller)
 	void *tofree = NULL;
 	unsigned long addr = (unsigned long)p;
 	struct kfree_info_entry entry;
-	struct kfree_info_entry *pentry = NULL;
+	struct kfree_info_entry *pentry;
 
 	if (!virt_addr_valid(addr)) {
 		/* there are too many NULL pointers so don't print for NULL */
@@ -793,58 +766,6 @@ int kernel_sec_get_debug_level(void)
 }
 EXPORT_SYMBOL(kernel_sec_get_debug_level);
 
-#ifdef CONFIG_SEC_MONITOR_BATTERY_REMOVAL
-static unsigned normal_off = 0;
-static int __init power_normal_off(char *val)
-{
-	normal_off = strncmp(val, "1",1) ? 0 : 1;
-	pr_info("%s, normal_off: %d\n", __func__, normal_off);
-	return 1;
-}
-__setup("normal_off=", power_normal_off);
-
-bool kernel_sec_set_normal_pwroff(int value)
-{
-	int normal_poweroff = value;
-	pr_info(" %s, value :%d\n", __func__, value);
-	sec_set_param(param_index_normal_poweroff, &normal_poweroff);
-
-	return 1;
-}
-EXPORT_SYMBOL(kernel_sec_set_normal_pwroff);
-
-static int sec_get_normal_off(void *data, u64 *val)
-{
-	*val = normal_off;
-	return 0;
-}
-DEFINE_SIMPLE_ATTRIBUTE(normal_off_fops, sec_get_normal_off, NULL, "%lld\n");
-
-static int __init sec_logger_init(void)
-{
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *dent;
-	struct dentry *dbgfs_file;
-
-	dent = debugfs_create_dir("sec_logger", 0);
-	if (IS_ERR_OR_NULL(dent)) {
-		pr_err("Failed to create debugfs dir of sec_logger\n");
-		return PTR_ERR(dent);
-	}
-
-	dbgfs_file = debugfs_create_file("normal_off", 0664, dent, NULL, &normal_off_fops);
-	
-	if (IS_ERR_OR_NULL(dbgfs_file)) {
-		pr_err("Failed to create debugfs file of normal_off file\n");
-		debugfs_remove_recursive(dent);
-		return PTR_ERR(dbgfs_file);
-	}
-#endif
-	return 0;
-}
-late_initcall(sec_logger_init);
-#endif
-
 /* core reg dump function*/
 static void sec_debug_save_core_reg(struct sec_debug_core_t *core_reg)
 {
@@ -1035,21 +956,16 @@ void sec_debug_hw_reset(void)
 }
 EXPORT_SYMBOL(sec_debug_hw_reset);
 
-#ifdef CONFIG_SEC_PERIPHERAL_SECURE_CHK
-void sec_peripheral_secure_check_fail(void)
+void sec_debug_low_panic(void)
 {
-
-	sec_debug_set_qc_dload_magic(0);
-	sec_debug_set_upload_magic(0x77665507);
-	pr_emerg("(%s) %s\n", __func__, sec_build_info);
 	pr_emerg("(%s) rebooting...\n", __func__);
 	flush_cache_all();
 	outer_flush_all();
-	msm_restart(0, "peripheral_hw_reset");
+	msm_restart(0, "sec_debug_low_panic");
 
-	while (1);
+	while (1)
+		;
 }
-#endif
 
 #ifdef CONFIG_SEC_DEBUG_LOW_LOG
 unsigned sec_debug_get_reset_reason(void)
@@ -1088,17 +1004,13 @@ static int sec_debug_panic_handler(struct notifier_block *nb,
 	else
 		sec_debug_set_upload_cause(UPLOAD_CAUSE_KERNEL_PANIC);
 
-#if !defined(CONFIG_MACH_JF) && defined(CONFIG_SEC_SSR_DEBUG_LEVEL_CHK)
-	if (!enable && !enable_cp_debug) {
-#else
 	if (!enable) {
-#endif
 #ifdef CONFIG_SEC_DEBUG_LOW_LOG
 		sec_debug_hw_reset();
 #endif
+		sec_debug_low_panic();
 		return -EPERM;
 	}
-
 /* enable after SSR feature
 	ssr_panic_handler_for_sec_dbg();
 */
@@ -1130,13 +1042,6 @@ void sec_debug_check_crash_key(unsigned int code, int value)
 {
 	static enum { NONE, STEP1, STEP2, STEP3} state = NONE;
 	pr_info("[%s] code(0x%x), value(%d)\n", __func__, code, value);
-
-	if (code == KEY_POWER) {
-		if (value)
-			sec_debug_set_upload_cause(UPLOAD_CAUSE_POWER_LONG_PRESS);
-		else
-			sec_debug_set_upload_cause(UPLOAD_CAUSE_INIT);
-	}
 
 	if (!enable)
 		return;
@@ -1319,6 +1224,7 @@ int sec_debug_subsys_add_varmon(char *name, unsigned int size, unsigned int pa)
 
 	return 0;
 }
+
 #ifdef CONFIG_SEC_DEBUG_MDM_FILE_INFO
 void sec_set_mdm_subsys_info(char *str_buf)
 {
@@ -1512,15 +1418,6 @@ int sec_debug_is_enabled(void)
 {
 	return enable;
 }
-
-#ifndef CONFIG_MACH_JF
-#ifdef CONFIG_SEC_SSR_DEBUG_LEVEL_CHK
-int sec_debug_is_enabled_for_ssr(void)
-{
-	return enable_cp_debug;
-}
-#endif
-#endif
 
 /* klaatu - schedule log */
 #ifdef CONFIG_SEC_DEBUG_SCHED_LOG
@@ -1873,60 +1770,6 @@ static int __init sec_debug_user_fault_init(void)
 	return 0;
 }
 device_initcall(sec_debug_user_fault_init);
-
-#ifdef CONFIG_USER_RESET_DEBUG
-static int set_reset_reason_proc_show(struct seq_file *m, void *v)
-{
-	if (reset_reason == RR_S)
-		seq_printf(m, "SPON\n");
-	else if (reset_reason == RR_W)
-		seq_printf(m, "WPON\n");
-	else if (reset_reason == RR_D)
-		seq_printf(m, "DPON\n");
-	else if (reset_reason == RR_K)
-		seq_printf(m, "KPON\n");
-	else if (reset_reason == RR_M)
-		seq_printf(m, "MPON\n");
-	else if (reset_reason == RR_P)
-		seq_printf(m, "PPON\n");
-	else if (reset_reason == RR_R)
-		seq_printf(m, "RPON\n");
-	else if (reset_reason == RR_B)
-		seq_printf(m, "BPON\n");
-	else
-		seq_printf(m, "NPON\n");
-
-	return 0;
-}
-
-static int sec_reset_reason_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, set_reset_reason_proc_show, NULL);
-}
-
-static const struct file_operations sec_reset_reason_proc_fops = {
-	.open = sec_reset_reason_proc_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int __init sec_debug_reset_reason_init(void)
-{
-	struct proc_dir_entry *entry;
-
-	entry = proc_create("reset_reason", S_IWUGO, NULL,
-		&sec_reset_reason_proc_fops);
-
-	if (!entry)
-		return -ENOMEM;
-
-	return 0;
-}
-
-device_initcall(sec_debug_reset_reason_init);
-#endif
-
 #ifdef CONFIG_SEC_DEBUG_DCVS_LOG
 void sec_debug_dcvs_log(int cpu_no, unsigned int prev_freq,
 						unsigned int new_freq)

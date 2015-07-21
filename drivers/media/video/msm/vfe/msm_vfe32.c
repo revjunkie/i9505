@@ -5844,23 +5844,19 @@ int msm_axi_subdev_init(struct v4l2_subdev *sd,
 
 #ifdef CONFIG_MSM_IOMMU
 device_misc_attach_failed:
-	pr_err("%s:in device_misc_attach_failed",__func__);
 	iommu_detach_device(mctl->domain, axi_ctrl->iommu_ctx_imgwr);
 device_imgwr_attach_failed:
 #endif
 	msm_cam_clk_enable(&axi_ctrl->pdev->dev, vfe32_clk_info,
 			axi_ctrl->vfe_clk, ARRAY_SIZE(vfe32_clk_info), 0);
 clk_enable_failed:
-	pr_err("%s:in clk_enable_failed",__func__);
 	if (axi_ctrl->fs_vfe)
 		regulator_disable(axi_ctrl->fs_vfe);
 fs_failed:
-	pr_err("%s:in fs_failed",__func__);
 	iounmap(axi_ctrl->share_ctrl->vfebase);
 	axi_ctrl->share_ctrl->vfebase = NULL;
 remap_failed:
 mctl_failed:
-	pr_err("%s:in remap_failed/mctl_failed",__func__);
 	return rc;
 }
 
@@ -5908,7 +5904,6 @@ void msm_axi_subdev_release(struct v4l2_subdev *sd)
 	disable_irq(axi_ctrl->vfeirq->start);
 	tasklet_kill(&axi_ctrl->vfe32_tasklet);
 #ifdef CONFIG_MSM_IOMMU
-    pr_err("%s iommu_detach_device ", __func__);
 	iommu_detach_device(pmctl->domain, axi_ctrl->iommu_ctx_misc);
 	iommu_detach_device(pmctl->domain, axi_ctrl->iommu_ctx_imgwr);
 #endif
@@ -5919,7 +5914,7 @@ void msm_axi_subdev_release(struct v4l2_subdev *sd)
 
 	iounmap(axi_ctrl->share_ctrl->vfebase);
 	axi_ctrl->share_ctrl->vfebase = NULL;
-    pr_err("%s setting share_ctrl->vfebase to NULL ", __func__);
+
 	if (atomic_read(&irq_cnt))
 		pr_warning("%s, Warning IRQ Count not ZERO\n", __func__);
 
@@ -6460,6 +6455,7 @@ void axi_stop(struct msm_cam_media_controller *pmctl,
 	uint32_t vfe_mode =
 	axi_ctrl->share_ctrl->current_mode & ~(VFE_OUTPUTS_RDI0|
 		VFE_OUTPUTS_RDI1|VFE_OUTPUTS_RDI2);
+	pr_err("AXI Debug %d\n",vfe_params.cmd_type);
 	switch (vfe_params.cmd_type) {
 	case AXI_CMD_PREVIEW:
 	case AXI_CMD_CAPTURE:
@@ -6482,10 +6478,11 @@ void axi_stop(struct msm_cam_media_controller *pmctl,
 	}
 
 	if (axi_ctrl->share_ctrl->stop_immediately) {
+		pr_err("AXI Debug stop_immediately start\n");
 		axi_disable_irq(axi_ctrl->share_ctrl,
 			axi_ctrl->share_ctrl->current_mode);
 		axi_stop_process(axi_ctrl->share_ctrl);
-
+		pr_err("AXI Debug stop_immediately end \n");
 		if (axi_ctrl->share_ctrl->stream_error == 1) {
 			pr_err(" Indicate stream error");
 			vfe32_send_isp_msg(
@@ -6809,6 +6806,7 @@ static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
 		break;
 	case CMD_AXI_STOP: {
 		struct msm_camera_vfe_params_t vfe_params;
+		pr_err("AXI Debug start\n");
 		if (copy_from_user(&vfe_params,
 				(void __user *)(vfecmd.value),
 				sizeof(struct msm_camera_vfe_params_t))) {
@@ -6821,6 +6819,7 @@ static int msm_axi_config(struct v4l2_subdev *sd, void __user *arg)
 		axi_ctrl->share_ctrl->stream_error =
 			vfe_params.stream_error;
 		axi_stop(pmctl, axi_ctrl, vfe_params);
+		pr_err("AXI Debug stop\n");
 		}
 		break;
 	case CMD_AXI_RESET: {

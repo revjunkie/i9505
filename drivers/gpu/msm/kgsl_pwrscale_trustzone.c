@@ -37,7 +37,7 @@ spinlock_t tz_lock;
 /* FLOOR is 5msec to capture up to 3 re-draws
  * per frame for 60fps content.
  */
-#define FLOOR			15000
+#define FLOOR			5000
 /* CEILING is 50msec, larger than any standard
  * frame length, but less than the idle timer.
  */
@@ -137,7 +137,6 @@ static void tz_idle(struct kgsl_device *device, struct kgsl_pwrscale *pwrscale)
 	device->ftbl->power_stats(device, &stats);
 	priv->bin.total_time += stats.total_time;
 	priv->bin.busy_time += stats.busy_time;
-	idle = priv->bin.total_time - priv->bin.busy_time;
 	/* Do not waste CPU cycles running this algorithm if
 	 * the GPU just started, or if less than FLOOR time
 	 * has passed since the last run.
@@ -146,10 +145,7 @@ static void tz_idle(struct kgsl_device *device, struct kgsl_pwrscale *pwrscale)
 		(priv->bin.total_time < FLOOR))
 		return;
 
-	kgsl_trace_kgsl_tz_params(device, priv->bin.total_time, priv->bin.busy_time,
-			idle, 10);
-
-        /* If the GPU has stayed in turbo mode for a while, *
+	/* If the GPU has stayed in turbo mode for a while, *
 	 * stop writing out values. */
 	if (pwr->active_pwrlevel == 0) {
 		if (priv->no_switch_cnt > SWITCH_OFF) {
@@ -174,8 +170,6 @@ static void tz_idle(struct kgsl_device *device, struct kgsl_pwrscale *pwrscale)
 		idle = priv->bin.total_time - priv->bin.busy_time;
 		idle = (idle > 0) ? idle : 0;
 		val = __secure_tz_entry(TZ_UPDATE_ID, idle, device->id);
-		kgsl_trace_kgsl_tz_params(device, priv->bin.total_time, priv->bin.busy_time,
-				idle, val);
 	}
 	priv->bin.total_time = 0;
 	priv->bin.busy_time = 0;

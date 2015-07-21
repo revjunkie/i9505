@@ -81,9 +81,8 @@
 #define STATUS_POLLING_PERIOD_US 3000
 
 #if defined(CONFIG_MACH_JACTIVE_EUR) || defined(CONFIG_MACH_JACTIVE_ATT)
-#define FW_SUPPORT_HSYNC03(x)	 (strncmp(x->product_id, "SY 03", 5) == 0)
-#define FW_SUPPORT_HSYNC04(x)	 ((strncmp(x->product_id, "SY 04", 5) == 0)|| (strncmp(x->product_id, "S5000B", 6) == 0))
-#define FW_NOT_SUPPORT_HSYNC(x)	 ((strncmp(x->product_id, "SY 01", 5) == 0) || (strncmp(x->product_id, "SY 02", 5) == 0))
+#define FW_SUPPORT_HYNC(x)	 ((strncmp(x->product_id, "SY 03", 5))
+#define FW_NOT_SUPPORT_HYNC(x)	 ((strncmp(x->product_id, "SY 01", 5) == 0) || (strncmp(x->product_id, "S5000B", 6) == 0) || (strncmp(x->product_id, "SY 02", 5) == 0))
 #endif
 
 static ssize_t fwu_sysfs_show_image(struct file *data_file,
@@ -804,11 +803,13 @@ static bool fwu_check_skip_reflash(bool mode, bool factory_fw,
 		/* UMS case */
 		int ic_revision_of_bin =
 			(int)fwu->ext_data_source[IC_REVISION_BIN_OFFSET];
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 		int fw_version_of_bin =
 			(int)fwu->ext_data_source[FW_VERSION_BIN_OFFSET];
 		int fw_release_date_of_bin =
 			(int)(fwu->ext_data_source[DATE_OF_FIRMWARE_BIN_OFFSET] << 8
 				| fwu->ext_data_source[DATE_OF_FIRMWARE_BIN_OFFSET + 1]);
+#endif
 
 		/* A1 revision does not have revision info in firmware */
 		if ((ic_revision_of_bin >> 4) != 0xB) {
@@ -967,31 +968,24 @@ static int fwu_start_reflash(bool mode, bool factory_fw)
 			dev_info(&fwu->rmi4_data->i2c_client->dev,
 				"%s: run fw update for FACTORY FIRMWARE\n",
 				__func__);
-			if (FW_NOT_SUPPORT_HSYNC(fwu))
+			if (FW_NOT_SUPPORT_HYNC(fwu))
 				snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
 					"%s", FW_IMAGE_NAME_B0_NON_HSYNC_FAC);
-			else if (FW_SUPPORT_HSYNC03(fwu))
+			else
 				snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
 					"%s", FW_IMAGE_NAME_B0_HSYNC_FAC);
-			else // FW_SUPPORT_HSYNC04(fwu)
-				snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
-					"%s", FW_IMAGE_NAME_B0_HSYNC04_FAC);
 		} else {
 		/* Read firmware according to ic revision */
 			if ((fwu->rmi4_data->ic_revision_of_ic >> 4) == 0xB) {
 				/* Read firmware according to panel ID */
 				switch (fwu->rmi4_data->panel_revision) {
 				case OCTA_PANEL_REVISION_34:
-					if (FW_NOT_SUPPORT_HSYNC(fwu))
+					if (FW_NOT_SUPPORT_HYNC(fwu))
 						snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
 							"%s", FW_IMAGE_NAME_B0_NON_HSYNC);
-					else if (FW_SUPPORT_HSYNC03(fwu)){
+					else
 						snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
 							"%s", FW_IMAGE_NAME_B0_HSYNC);
-						}
-					else // FW_SUPPORT_HSYNC04(fwu)
-						snprintf(fw_path, SYNAPTICS_MAX_FW_PATH,
-							"%s", FW_IMAGE_NAME_B0_HSYNC04);
 					break;
 				default:
 					dev_info(&fwu->rmi4_data->i2c_client->dev,

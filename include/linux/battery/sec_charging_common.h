@@ -33,7 +33,7 @@
 #include <linux/device.h>
 
 /* definitions */
-#define	SEC_SIZEOF_POWER_SUPPLY_TYPE	15
+#define	SEC_SIZEOF_POWER_SUPPLY_TYPE	13
 
 enum sec_battery_voltage_mode {
 	/* average voltage */
@@ -118,12 +118,8 @@ enum sec_battery_full_charged {
 	SEC_BATTERY_FULLCHARGED_NONE = 0,
 	/* current check by ADC */
 	SEC_BATTERY_FULLCHARGED_ADC,
-	/* current check by ADC and dual check (1st, 2nd top-off) */
-	SEC_BATTERY_FULLCHARGED_ADC_DUAL,
 	/* fuel gauge current check */
 	SEC_BATTERY_FULLCHARGED_FG_CURRENT,
-	/* fuel gauge current check and dual check (1st, 2nd top-off) */
-	SEC_BATTERY_FULLCHARGED_FG_CURRENT_DUAL,
 	/* time check */
 	SEC_BATTERY_FULLCHARGED_TIME,
 	/* SOC check */
@@ -144,10 +140,10 @@ enum sec_battery_full_charged {
   * full-charged by absolute-timer only in high voltage
   */
 #define SEC_BATTERY_FULL_CONDITION_NOTIMEFULL	1
-/* SEC_BATTERY_FULL_CONDITION_NOSLEEPINFULL
-  * do not set polling time as sleep polling time in full-charged
+/* SEC_BATTERY_FULL_CONDITION_SLEEPINFULL
+  * change polling time as sleep polling time even in full-charged
   */
-#define SEC_BATTERY_FULL_CONDITION_NOSLEEPINFULL	2
+#define SEC_BATTERY_FULL_CONDITION_SLEEPINFULL	2
 /* SEC_BATTERY_FULL_CONDITION_SOC
   * use capacity for full-charged check
   */

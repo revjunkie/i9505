@@ -23,10 +23,6 @@ struct sec_param_data {
 #if defined(CONFIG_MACH_APEXQ) || defined(CONFIG_MACH_AEGIS2)
 	unsigned int slideCount;
 #endif
-#ifdef CONFIG_SEC_MONITOR_BATTERY_REMOVAL
-	unsigned int normal_poweroff;
-	unsigned int enable_diag;
-#endif
 } ;
 
 enum sec_param_index {
@@ -44,10 +40,6 @@ enum sec_param_index {
 #if defined(CONFIG_MACH_APEXQ) || defined(CONFIG_MACH_AEGIS2)
 	param_slideCount,
 #endif
-#ifdef CONFIG_SEC_MONITOR_BATTERY_REMOVAL
-	param_index_normal_poweroff,
-#endif
-	param_index_enable_diag,
 } ;
 
 extern bool sec_open_param(void);
