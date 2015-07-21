@@ -1592,6 +1592,12 @@ menu "Kernel Features"
 
 source "kernel/time/Kconfig"
 
+config REV_HOTPLUG
+	bool "Revactive Hotplug Driver" 
+	default y
+	help
+	  Custom Hotplug Driver that turns on/off cores based on system load.
+ 
 config HAVE_SMP
 	bool
 	help
