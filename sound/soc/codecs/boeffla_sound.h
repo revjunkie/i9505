@@ -19,8 +19,8 @@
 #include <linux/mfd/wcd9xxx/wcd9310_registers.h>
 #include <linux/mfd/wcd9xxx/pdata.h>
 //#include "wcd9310.h"
-#include "wcd9xxx-resmgr.h"
-#include "wcd9xxx-common.h"
+//#include "wcd9xxx-resmgr.h"
+//#include "wcd9xxx-common.h"
 
 
 /*****************************************/
