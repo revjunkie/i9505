@@ -83,7 +83,7 @@ static void reset_counter(void)
 	rev.shift_diff_all = 0;
 }
 
-static void __cpuinit plug_cpu(int max_cpu)
+static void __ref plug_cpu(int max_cpu)
 {
 	unsigned int cpu;
 
@@ -140,7 +140,7 @@ static unsigned int get_load(unsigned int cpu)
 	return 0;
 }
 
-static void  __cpuinit hotplug_decision_work(struct work_struct *work)
+static void  __ref hotplug_decision_work(struct work_struct *work)
 {
 	unsigned int online_cpus, load, up_load, cpu;
 	unsigned int total_load = 0;
@@ -267,10 +267,11 @@ static void rev_hotplug_early_suspend(struct early_suspend *handler)
 	unsigned int cpu;
 	if (rev.active) 
 	for_each_online_cpu(cpu) {
-		if (cpu)
+		if (cpu == 0)
+			continue;
 			cpu_down(cpu);
-	pr_info("rev_hotplug: early suspend\n");
 	}
+	pr_info("rev_hotplug: early suspend\n");
 }
 
 static void __ref rev_hotplug_late_resume(struct early_suspend *handler)
@@ -296,7 +297,7 @@ static int __init rev_hotplug_init(void)
 
 	INIT_DELAYED_WORK(&hotplug_work, hotplug_decision_work);
 	if (rev.active)
-	schedule_delayed_work_on(0, &hotplug_work, HZ * 60);
+	schedule_delayed_work_on(0, &hotplug_work, HZ * 30);
 
 	rev_kobject = kobject_create_and_add("rev_hotplug", kernel_kobj);
 	if (rev_kobject) {
