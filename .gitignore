@@ -162,7 +162,8 @@ kernel/timeconst.h
 #
 lib/gen_crc32table
 lib/crc32table.h
-tools/lz4demo
+!tools/lz4demo/lz4demo
+!firmware/*.bin
 # 
 # Lucid
 #
