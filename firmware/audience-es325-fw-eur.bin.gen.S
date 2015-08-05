@@ -2,7 +2,7 @@
     .section .rodata
     .p2align 2
 _fw_audience_es325_fw_eur_bin_bin:
-    .incbin "/home/revjunkie/s4/firmware/audience-es325-fw-eur.bin"
+    .incbin "/home/revjunkie/kernel/i9505/firmware/audience-es325-fw-eur.bin"
 _fw_end:
    .section .rodata.str,"aMS",%progbits,1
     .p2align 2
